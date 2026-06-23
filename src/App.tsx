@@ -1,7 +1,24 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import { api, formatRange, formatYear, parseDateText, dateToText, type EventItem, type EventInput } from './api'
 import './App.css'
+
+// ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
+type Theme = 'light' | 'dark'
+type AppSettings = { theme: Theme; invertZoom: boolean }
+const SETTINGS_KEY = 'nenpyo-settings'
+
+function loadSettings(): AppSettings {
+  const defaults: AppSettings = {
+    theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    invertZoom: false,
+  }
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (raw) return { ...defaults, ...JSON.parse(raw) }
+  } catch { /* 壊れていたら既定値 */ }
+  return defaults
+}
 
 export default function App() {
   const [username, setUsername] = useState<string | null>(null)
@@ -100,14 +117,16 @@ function fracYear(year: number, month: number | null, day: number | null): numbe
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, yearsVisible, setYearsVisible }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
   onEdit: (e: EventItem) => void
   centerYear: number
+  setCenterYear: (updater: (v: number) => number) => void
   yearsVisible: number
   setYearsVisible: (updater: (v: number) => number) => void
+  invertZoom: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -121,12 +140,14 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, years
       // Shift 押下時はブラウザが deltaY を deltaX に変換することがあるため、大きい方を使う
       const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
       if (delta === 0) return
-      const factor = delta > 0 ? 1.2 : 1 / 1.2
+      // 既定: 奥に回す(delta>0)と表示幅拡大=縮小表示。設定で方向を反転できる。
+      const zoomOut = invertZoom ? delta < 0 : delta > 0
+      const factor = zoomOut ? 1.2 : 1 / 1.2
       setYearsVisible((v) => Math.min(40000, Math.max(1, v * factor)))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setYearsVisible])
+  }, [setYearsVisible, invertZoom])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
@@ -190,9 +211,65 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, years
       </div>
 
       <div className="chart-hint hint">
-        中心 {formatYear(Math.round(centerYear))}／表示幅 約{Math.round(yearsVisible).toLocaleString()}年
-        （Shift＋ホイールで拡大・縮小）
+        <button className="chart-nav" onClick={() => setCenterYear((y) => y - 1)} aria-label="中心を1年戻す">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="chart-hint-text">
+          中心 {formatYear(Math.round(centerYear))}／表示幅 約{Math.round(yearsVisible).toLocaleString()}年
+          （Shift＋ホイールで拡大・縮小）
+        </span>
+        <button className="chart-nav" onClick={() => setCenterYear((y) => y + 1)} aria-label="中心を1年進める">
+          <ChevronRight size={18} />
+        </button>
       </div>
+    </div>
+  )
+}
+
+// ---- 設定画面（メイン領域に表示） ------------------------------------------
+function SettingsPanel({ settings, setSettings, onClose }: {
+  settings: AppSettings
+  setSettings: (updater: (s: AppSettings) => AppSettings) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="settings-panel">
+      <div className="settings-head">
+        <h2 className="settings-title">設定</h2>
+        <button className="settings-close" onClick={onClose}>閉じる</button>
+      </div>
+
+      <section className="settings-section">
+        <h3 className="settings-label">テーマ</h3>
+        <div className="theme-options">
+          {(['light', 'dark'] as Theme[]).map((t) => (
+            <button
+              key={t}
+              className={'theme-option' + (settings.theme === t ? ' selected' : '')}
+              onClick={() => setSettings((s) => ({ ...s, theme: t }))}
+            >
+              {t === 'light' ? 'ライトモード' : 'ダークモード'}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">年表チャートの操作</h3>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={settings.invertZoom}
+            onChange={(e) => setSettings((s) => ({ ...s, invertZoom: e.target.checked }))}
+          />
+          <span>Shift＋ホイールの拡大・縮小の向きを逆にする</span>
+        </label>
+        <p className="settings-note">
+          通常はホイールを手前に回すと拡大します。チェックすると向きが反転します。
+        </p>
+      </section>
+
+      <p className="settings-note">設定はこのブラウザに保存され、次回も保持されます。</p>
     </div>
   )
 }
@@ -203,7 +280,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [chartSelectedId, setChartSelectedId] = useState<number | null>(null)
   // 年表チャートの表示ビュー。中心はデフォルトで西暦1年1月1日（= 小数年 1.0）。
-  const centerYear = fracYear(1, 1, 1)
+  const [centerYear, setCenterYear] = useState(fracYear(1, 1, 1))
   const [yearsVisible, setYearsVisible] = useState(2000)
   // 開始・終了は1つのテキストとして編集し、保存時に年月日へ解析する
   const [startText, setStartText] = useState('')
@@ -213,6 +290,15 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [isNew, setIsNew] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // 設定画面の表示と、ユーザー設定（テーマ等）
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState<AppSettings>(loadSettings)
+
+  // 設定をドキュメントへ反映＆ localStorage に保存
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme)
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* 無視 */ }
+  }, [settings])
 
   const resetForm = (s = '', e = '', t = '', d = '') => {
     setStartText(s); setEndText(e); setTitle(t); setDetail(d)
@@ -229,6 +315,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   useEffect(() => { reload() }, [reload])
 
   const selectEvent = (e: EventItem) => {
+    setShowSettings(false)
     setSelectedId(e.id)
     setIsNew(false)
     setConfirmDelete(false)
@@ -240,10 +327,20 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const startNew = () => {
+    setShowSettings(false)
     setSelectedId(null)
     setIsNew(true)
     setConfirmDelete(false)
     resetForm(String(new Date().getFullYear()))
+  }
+
+  // 入力・編集画面を閉じて年表チャートへ戻る
+  const closeEditor = () => {
+    setSelectedId(null)
+    setIsNew(false)
+    setConfirmDelete(false)
+    setError('')
+    resetForm()
   }
 
   const save = async () => {
@@ -327,10 +424,25 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               </li>
             ))}
           </ul>
+          <div className="list-foot">
+            <button
+              className={'gear-btn' + (showSettings ? ' active' : '')}
+              title="設定"
+              onClick={() => setShowSettings(true)}
+            >
+              <Settings size={18} />
+            </button>
+          </div>
         </aside>
 
         <main className="editor">
-          {!editing ? (
+          {showSettings ? (
+            <SettingsPanel
+              settings={settings}
+              setSettings={setSettings}
+              onClose={() => setShowSettings(false)}
+            />
+          ) : !editing ? (
             events.length > 0 ? (
               <TimelineChart
                 events={events}
@@ -338,8 +450,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 onSelect={setChartSelectedId}
                 onEdit={selectEvent}
                 centerYear={centerYear}
+                setCenterYear={setCenterYear}
                 yearsVisible={yearsVisible}
                 setYearsVisible={setYearsVisible}
+                invertZoom={settings.invertZoom}
               />
             ) : (
               <div className="placeholder">
@@ -349,6 +463,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             )
           ) : (
             <div className="form">
+              <div className="form-head">
+                <h2 className="form-title">{isNew ? '出来事を追加' : '出来事を編集'}</h2>
+                <button className="settings-close" onClick={closeEditor}>閉じる</button>
+              </div>
               <div className="range-row">
                 <label className="fld">開始
                   <input value={startText} placeholder="例: 1853 または 1853/7/8"
@@ -361,7 +479,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 </label>
               </div>
               <div className="hint range-hint">
-                年のみ「1853」／年月日「1853/7/8」or「1853-7-8」（紀元前は -660）。終了は空欄なら単発の出来事。
+                年のみ「1853」／年月日「1853/7/8」（区切りは「/」のみ）。紀元前は先頭に「-」（例: -660）。終了は空欄なら単発の出来事。
               </div>
 
               <label className="fld">タイトル

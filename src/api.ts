@@ -77,10 +77,11 @@ export function formatDate(year: number, month: number | null, day: number | nul
 export type ParsedDate = { year: number | null; month: number | null; day: number | null }
 
 // テキストを年月日に解析する。
-//   空文字            -> 日付なし (year=null)
-//   半角数字のみ      -> 年のみ           例: "1853"
-//   / または - 区切り -> 年/月 または 年/月/日  例: "1853/7/8", "1853-7-8", "1853/7"
-//   先頭の "-" は紀元前の符号として扱う  例: "-660", "-660/3/15"
+//   空文字       -> 日付なし (year=null)
+//   半角数字のみ -> 年のみ              例: "1853"
+//   "/" 区切り   -> 年/月 または 年/月/日  例: "1853/7/8", "1853/7"
+//   先頭の "-" は紀元前の符号としてのみ扱う  例: "-660", "-660/3/15"
+//   （ハイフンは日付区切りには使えない）
 // 書式が不正なら Error を投げる。
 export function parseDateText(text: string): ParsedDate {
   const t = text.trim()
@@ -90,7 +91,7 @@ export function parseDateText(text: string): ParsedDate {
   let body = t
   if (body.startsWith('-')) { sign = -1; body = body.slice(1) }
 
-  const parts = body.split(/[/-]/)
+  const parts = body.split('/')
   if (parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) {
     throw new Error(`日付の書式が正しくありません: 「${text}」`)
   }

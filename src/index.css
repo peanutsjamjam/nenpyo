@@ -14,8 +14,9 @@
   color: var(--text);
 }
 
+/* ダーク配色の共通定義。OS がダークかつ未設定の初回表示と、明示的なダーク選択時に適用 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1c1a17;
     --panel: #262320;
     --panel-2: #211e1b;
@@ -26,6 +27,18 @@
     --accent-soft: #3a3026;
     --danger: #e0796d;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1c1a17;
+  --panel: #262320;
+  --panel-2: #211e1b;
+  --text: #ece7df;
+  --muted: #9a948a;
+  --border: #38332d;
+  --accent: #c79a6b;
+  --accent-soft: #3a3026;
+  --danger: #e0796d;
 }
 
 * { box-sizing: border-box; }

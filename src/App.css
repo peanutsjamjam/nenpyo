@@ -20,7 +20,8 @@
 
 .list {
   width: 320px; flex-shrink: 0; border-right: 1px solid var(--border);
-  background: var(--panel-2); overflow-y: auto; padding: 14px;
+  background: var(--panel-2); padding: 14px;
+  display: flex; flex-direction: column; min-height: 0;
 }
 .new-btn {
   display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center;
@@ -30,8 +31,21 @@
 .new-btn:hover { filter: brightness(1.05); }
 .empty { color: var(--muted); font-size: 14px; line-height: 1.7; text-align: center; }
 
-/* タイムライン表示 */
-.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+/* タイムライン表示（リスト部分だけスクロール、歯車は下端に固定） */
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; flex: 1; min-height: 0; overflow-y: auto; }
+
+/* サイドバー下端の設定（歯車）ボタン */
+.list-foot {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-start;
+}
+.gear-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
+}
+.gear-btn:hover { color: var(--text); border-color: var(--accent); }
+.gear-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .timeline::before {
   content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px;
   width: 2px; background: var(--border);
@@ -66,12 +80,20 @@
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .chart-empty { color: var(--muted); text-align: center; line-height: 1.7; margin-top: 40px; }
-.chart-hint { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); text-align: right; }
+.chart-hint { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.chart-hint-text { flex: 1; text-align: center; }
+.chart-nav {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
+}
+.chart-nav:hover { background: var(--accent-soft); border-color: var(--accent); }
 
 .chart-body { }
 .chart-row { height: 38px; border-radius: 6px; cursor: pointer; }
 .chart-row:hover { background: var(--panel-2); }
-.chart-row.selected { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+/* 選択は行全体ではなく、実際の期間バーの周囲だけにリング表示する */
+.chart-row.selected .chart-bar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .chart-track { position: relative; width: 100%; height: 100%; }
 .chart-zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
 .chart-bar {
@@ -90,6 +112,11 @@
 }
 
 .form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 640px; }
+.form-head {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 4px;
+}
+.form-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); }
 .date-block { display: flex; flex-direction: column; gap: 6px; }
 .date-label { font-size: 13px; font-weight: 700; color: var(--text); }
 .date-row { display: flex; gap: 12px; }
@@ -143,6 +170,33 @@
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 .modal-actions button { border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
 .modal-actions button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ---- 設定画面（メイン領域） ---- */
+.settings-panel { flex: 1; overflow-y: auto; max-width: 560px; }
+.settings-head {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 24px;
+}
+.settings-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); }
+.settings-close {
+  padding: 6px 14px; font-size: 14px; color: var(--text);
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+}
+.settings-close:hover { background: var(--panel-2); }
+.settings-section { margin-bottom: 28px; }
+.settings-label {
+  margin: 0 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted);
+}
+.theme-options { display: flex; gap: 10px; }
+.theme-option {
+  flex: 1; padding: 10px 16px; font-size: 14px; color: var(--text);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.theme-option:hover { border-color: var(--accent); }
+.theme-option.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.settings-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.settings-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+.settings-toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
 /* ---- スマホ ---- */
 @media (max-width: 640px) {
