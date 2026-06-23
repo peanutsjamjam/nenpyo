@@ -1,0 +1,50 @@
+:root {
+  --bg: #f7f5ef;
+  --panel: #ffffff;
+  --panel-2: #f1eee6;
+  --text: #2a2723;
+  --muted: #8a857c;
+  --border: #e2ddd2;
+  --accent: #9a6b3f;
+  --accent-soft: #f0e3d4;
+  --danger: #c0473b;
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1a17;
+    --panel: #262320;
+    --panel-2: #211e1b;
+    --text: #ece7df;
+    --muted: #9a948a;
+    --border: #38332d;
+    --accent: #c79a6b;
+    --accent-soft: #3a3026;
+    --danger: #e0796d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body { background: var(--bg); }
+
+button { font-family: inherit; cursor: pointer; }
+
+input, textarea {
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+input:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+.splash { display: grid; place-items: center; height: 100%; color: var(--muted); }
