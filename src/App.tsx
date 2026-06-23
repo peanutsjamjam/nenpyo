@@ -128,6 +128,24 @@ function posToYM(pos: number): { year: number; month: number } {
   return { year, month: monthsTotal - year * 12 + 1 }
 }
 
+// 時間軸の座標 → 年・月・日。1年=12ヶ月×31スロット（fracYear と同じ日割り）。
+const SLOTS_PER_YEAR = 12 * 31
+function posToYMD(pos: number): { year: number; month: number; day: number } {
+  const slots = Math.round(pos * SLOTS_PER_YEAR)
+  const base = Math.floor(slots / SLOTS_PER_YEAR)        // AD: year-1, BC: year
+  const rem = slots - base * SLOTS_PER_YEAR               // 0..371
+  const month = Math.floor(rem / 31) + 1
+  const day = (rem % 31) + 1
+  return { year: pos >= 0 ? base + 1 : base, month, day }
+}
+
+// グリッド刻みとズーム範囲（座標=年単位）。最小は1日、最大は10万年スケール。
+const DAY = 1 / SLOTS_PER_YEAR        // ≈ 0.00269 年（1日）
+const MONTH = 1 / 12
+const GRID_STEPS = [DAY, MONTH, 1, 10, 100, 1000, 10000, 100000]
+const MIN_YEARS = DAY                 // 表示幅の下限（約1日）
+const MAX_YEARS = 40000               // 表示幅の上限
+
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
 // 単クリック: その行を選択（縁取り表示）するだけ。
@@ -163,7 +181,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         // Ctrl+ホイール: 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
         const zoomOut = invertZoom ? delta < 0 : delta > 0
         const factor = zoomOut ? 1.2 : 1 / 1.2
-        setYearsVisible((v) => Math.min(40000, Math.max(1, v * factor)))
+        setYearsVisible((v) => Math.min(MAX_YEARS, Math.max(MIN_YEARS, v * factor)))
       } else {
         // Shift+ホイール: 左右にパン。移動量は表示幅に比例させる。
         const step = (delta > 0 ? 1 : -1) * yearsVisible / 10
@@ -178,12 +196,11 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   const rangeEnd = centerYear + yearsVisible / 2
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
-  // 矢印ボタン1回の移動量。表示幅に比例（約1割）させ、広いスケールでは大きく動かす。
-  const panStep = Math.max(1, yearsVisible / 10)
+  // 矢印ボタン1回の移動量。表示幅に比例（約1割）させ、スケールに追従させる。
+  const panStep = Math.max(MIN_YEARS, yearsVisible / 10)
 
-  // スケールに応じた縦グリッド線。1ヶ月〜10万年の刻みから、
+  // スケールに応じた縦グリッド線。1日〜10万年の刻みから、
   // 線が最大21本（=20区間）以内に収まる最も細かい刻みを選ぶ。
-  const GRID_STEPS = [1 / 12, 1, 10, 100, 1000, 10000, 100000]
   let gridStep = GRID_STEPS[GRID_STEPS.length - 1]
   for (const iv of GRID_STEPS) {
     if (yearsVisible / iv <= 20) { gridStep = iv; break }
@@ -193,28 +210,35 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   const kEnd = Math.floor(rangeEnd / gridStep)
   for (let k = kStart; k <= kEnd && gridLines.length < 60; k++) {
     const y = k * gridStep
-    const { year: yr, month: mo } = posToYM(y)
     let label: string
     if (gridStep >= 1) {
-      label = formatYearAD(yr) // 年単位の刻み
-    } else {
+      const { year } = posToYM(y)
+      label = formatYearAD(year) // 年単位の刻み
+    } else if (gridStep === MONTH) {
       // 1ヶ月刻み: 1月の線には年、それ以外は「○月」を表示
-      label = mo === 1 ? formatYearAD(yr) : `${mo}月`
+      const { year, month } = posToYM(y)
+      label = month === 1 ? formatYearAD(year) : `${month}月`
+    } else {
+      // 1日刻み: 月初の線には月（1月なら年）、それ以外は「○日」を表示
+      const { year, month, day } = posToYMD(y)
+      label = day === 1 ? (month === 1 ? formatYearAD(year) : `${month}月`) : `${day}日`
     }
     // 座標0（AD1の頭＝1BC/AD1の境目）を強調
     gridLines.push({ left: pct(y), major: k === 0, label })
   }
 
+  // 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
+  const unitWidth = (month: number | null, day: number | null) =>
+    day != null ? DAY : month != null ? MONTH : 1
+  // バーの占有区間 [s, end)。終了は「その単位の終わり＝次の単位の頭」まで広げる。
+  // 単発（終了なし）は開始の単位1つ分の幅にする（例: 1日のイベントは縦線〜次の縦線）。
   const eventSpan = (e: EventItem) => {
     const s = fracYear(e.start_year, e.start_month, e.start_day)
-    const end = e.end_year == null ? s : fracYear(e.end_year, e.end_month ?? 12, e.end_day ?? 31)
+    const end = e.end_year == null
+      ? s + unitWidth(e.start_month, e.start_day)
+      : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_month, e.end_day)
     return { s, end }
   }
-  // ビューポートに重なる項目だけを表示
-  const visible = events.filter((e) => {
-    const { s, end } = eventSpan(e)
-    return s <= rangeEnd && end >= rangeStart
-  })
 
   return (
     <div className="chart">
@@ -231,47 +255,54 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       </div>
 
       <div className="chart-scroll" ref={scrollRef}>
-        {visible.length === 0 ? (
-          <p className="chart-empty">この範囲に該当する出来事はありません。<br />Ctrl＋ホイールで拡大縮小、Shift＋ホイールで左右に移動できます。</p>
-        ) : (
-          <div className="chart-body">
-            <div className="chart-grid">
-              {gridLines.map((g, i) => (
-                <div
-                  key={i}
-                  className={g.major ? 'chart-grid-line major' : 'chart-grid-line'}
-                  style={{ left: `${g.left}%` }}
-                />
-              ))}
-            </div>
-            {visible.map((e) => {
-              const { s, end } = eventSpan(e)
-              const isPoint = e.end_year == null
-              const left = pct(s)
-              const width = Math.max(0.4, pct(end) - left)
-              const labelCenter = pct(clamp((s + end) / 2, rangeStart, rangeEnd))
-              // 色は「色を持つ（=prime）タグ」のものを使う。tag_ids 内に普通タグが先頭に来ても拾えるよう全件から探す。
-              const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
-              return (
-                <div
-                  className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
-                  key={e.id}
-                  onClick={() => onSelect(e.id)}
-                  title={`${e.title || '（無題）'}（${formatRangeAD(e)}）`}
-                >
-                  <div className="chart-track">
-                    <div className={isPoint ? 'chart-bar point' : 'chart-bar'} style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }} />
-                    <span
-                      className="chart-bar-label"
-                      style={{ left: `${labelCenter}%` }}
-                      onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
-                    >{e.title || '（無題）'}</span>
-                  </div>
-                </div>
-              )
-            })}
+        <div className="chart-body">
+          <div className="chart-grid">
+            {gridLines.map((g, i) => (
+              <div
+                key={i}
+                className={g.major ? 'chart-grid-line major' : 'chart-grid-line'}
+                style={{ left: `${g.left}%` }}
+              />
+            ))}
           </div>
-        )}
+          {/* 全イベントを常に1行ずつ表示（並び順固定）。バーが画面外でも行は残し、
+              タイトルは近い側の端に寄せて表示する。 */}
+          {events.map((e) => {
+            const { s, end } = eventSpan(e)
+            const left = pct(s)
+            const width = Math.max(0.4, pct(end) - left)
+            // 色は「色を持つ（=prime）タグ」のものを使う。tag_ids 内に普通タグが先頭に来ても拾えるよう全件から探す。
+            const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
+            const title = e.title || '（無題）'
+            // バーが完全に画面外なら、タイトルを近い側の端に固定（矢印で方向を示す）
+            const offLeft = end < rangeStart
+            const offRight = s > rangeEnd
+            let labelClass = 'chart-bar-label'
+            let labelLeft = pct(clamp((s + end) / 2, rangeStart, rangeEnd))
+            let labelText = title
+            if (offLeft) { labelClass += ' at-left'; labelLeft = 0; labelText = `◀ ${title}` }
+            else if (offRight) { labelClass += ' at-right'; labelLeft = 100; labelText = `${title} ▶` }
+            return (
+              <div
+                className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
+                key={e.id}
+                onClick={() => onSelect(e.id)}
+                title={`${title}（${formatRangeAD(e)}）`}
+              >
+                <div className="chart-track">
+                  {!offLeft && !offRight && (
+                    <div className="chart-bar" style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }} />
+                  )}
+                  <span
+                    className={labelClass}
+                    style={{ left: `${labelLeft}%` }}
+                    onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
+                  >{labelText}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       <div className="chart-hint hint">
