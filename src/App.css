@@ -73,9 +73,9 @@
   border-bottom: 1px solid var(--border);
 }
 .chart-axis { position: relative; flex: 1; height: 16px; }
-.axis-tick { position: absolute; font-size: 11px; color: var(--muted); white-space: nowrap; }
-.axis-tick.mid { transform: translateX(-50%); }
-.axis-tick.end { transform: translateX(-100%); }
+/* 各縦グリッド線の真上に、その線が表す年（または月）を中央寄せで表示 */
+.axis-tick { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.axis-tick.major { color: var(--text); font-weight: 700; }
 
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
@@ -89,13 +89,16 @@
 }
 .chart-nav:hover { background: var(--accent-soft); border-color: var(--accent); }
 
-.chart-body { }
-.chart-row { height: 38px; border-radius: 6px; cursor: pointer; }
+.chart-body { position: relative; min-height: 100%; }
+/* スケール連動の縦グリッド線（全行の背面に1枚で敷く） */
+.chart-grid { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.chart-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.chart-grid-line.major { background: var(--muted); }
+.chart-row { position: relative; z-index: 1; height: 38px; border-radius: 6px; cursor: pointer; }
 .chart-row:hover { background: var(--panel-2); }
 /* 選択は行全体ではなく、実際の期間バーの周囲だけにリング表示する */
 .chart-row.selected .chart-bar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .chart-track { position: relative; width: 100%; height: 100%; }
-.chart-zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
 .chart-bar {
   position: absolute; top: 50%; transform: translateY(-50%);
   height: 18px; min-width: 6px; border-radius: 9px; background: var(--accent);
@@ -197,6 +200,47 @@
 .settings-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
 .settings-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
 .settings-toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+
+/* 設定画面: タグの色 */
+.tag-color-list { display: flex; flex-direction: column; gap: 10px; }
+.tag-color-row { display: flex; align-items: center; gap: 12px; }
+.tag-color-row input[type="color"] {
+  width: 40px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); cursor: pointer;
+}
+.tag-color-name { font-size: 14px; color: var(--text); }
+
+/* 左サイドバー: タグ欄 */
+.tag-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.tag-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.tag-section-title { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
+.tag-add-btn, .tag-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
+  border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
+}
+.tag-add-btn:hover, .tag-icon-btn:hover { color: var(--text); border-color: var(--accent); }
+.tag-add-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.tag-add-row input { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px; }
+.tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
+.tag-list { list-style: none; margin: 0; padding: 0; }
+.tag-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.tag-swatch { flex-shrink: 0; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); }
+/* 色を持たない（prime でない）タグの見本: 中身なしの四角 */
+.tag-swatch.none { background: transparent; border: 1px dashed var(--muted); }
+/* 入力中の見本: クリックで色を選べる（= prime にする）。四角全体を当たり判定に。 */
+.tag-swatch-pick { position: relative; padding: 0; cursor: pointer; }
+.tag-swatch-pick input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; cursor: pointer; }
+.tag-name { flex: 1; min-width: 0; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 編集フォーム: タグ選択チップ */
+.tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text);
+}
+.tag-chip:hover { border-color: var(--accent); }
+.tag-chip.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
 
 /* ---- スマホ ---- */
 @media (max-width: 640px) {

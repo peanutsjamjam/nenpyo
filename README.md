@@ -16,12 +16,12 @@
 api.cgi (Perl CGI, suexec で sugawara 実行)
    │  DBI / DBD::Pg (peer 認証・パスワード不要)
    ▼
-PostgreSQL  DB: nenpyo  (users / sessions / events)
+PostgreSQL  DB: nenpyo  (users / sessions / events / tags / event_tags)
 ```
 
 - **フロント**: Vite + React + TypeScript。`dist/` に本番ビルド。
   開始・終了の日付はそれぞれ1つのテキスト欄で入力し、保存時に `parseDateText` で年月日へ解析する
-  （`1853`=年のみ／`1853/7/8`・`1853-7-8`=年月日／`1853/7`=年月。先頭 `-` は紀元前）。
+  （`1853`=年のみ／`1853/7/8`=年月日／`1853/7`=年月。区切りは `/` のみ。先頭 `-` は紀元前の符号）。
 - **バックエンド**: `api.cgi`（`#!/usr/bin/perl`、DBI/DBD::Pg/JSON::PP/Digest::SHA）。
 - **配信**: Apache UserDir（`~/public_html/nenpyo/` → `/~sugawara/nenpyo/`）。`.htaccess` で
   ルートと未知パスを `dist/` へ rewrite、実在ファイル（`api.cgi`）はそのまま実行。
@@ -30,6 +30,9 @@ PostgreSQL  DB: nenpyo  (users / sessions / events)
 - **データ**: `events`。開始 `start_year`（必須・負値=紀元前）/`start_month`/`start_day`、
   終了 `end_year`/`end_month`/`end_day`（すべて任意。終了なし=単発の出来事）、`title`、`detail`。
   日は月とともに、月は年とともに指定する必要がある。ユーザーごとに分離。
+- **タグ**: `tags`（ユーザーごと・`name` 一意・`color` は `#rrggbb`）と `event_tags`（多対多）。
+  1つの出来事に複数タグを付けられる。期間バー／一覧ドットの色は、付けたタグのうち**タグ名昇順で先頭**の色を使う。
+  タグの作成・削除は画面左の「タグ」欄、色の変更は設定画面（歯車）で行う。
 
 ## API（`api.cgi`、`?action=` と HTTP メソッドで分岐）
 
@@ -40,9 +43,13 @@ PostgreSQL  DB: nenpyo  (users / sessions / events)
 | POST | logout | ログアウト |
 | GET | me | `{username}` / 未ログインは 401 |
 | GET | events | 自分の出来事一覧（year, month, day 昇順） |
-| POST | event | `{start_year,start_month,start_day,end_year,end_month,end_day,title,detail}` 追加 |
-| PUT | event&id=ID | 更新（本人の項目のみ） |
+| POST | event | `{start_year,...,title,detail,tag_ids:[..]}` 追加 |
+| PUT | event&id=ID | 更新（本人の項目のみ。`tag_ids` で結びつきを置換） |
 | DELETE | event&id=ID | 削除（本人の項目のみ） |
+| GET | tags | 自分のタグ一覧（name 昇順） |
+| POST | tag | `{name,color}` タグ作成 |
+| PUT | tag&id=ID | `{name,color}` 更新（本人のみ） |
+| DELETE | tag&id=ID | 削除（本人のみ。event_tags はカスケード） |
 
 ## 開発・公開フロー
 
@@ -59,5 +66,5 @@ npm run build    # dist/ を更新 = 公開サイトに即反映
 - システムperl `/usr/bin/perl` に `perl-DBI` / `perl-DBD-Pg` / `perl-JSON-PP` / `perl-Digest-SHA` を導入済み
   （`sudo dnf install` で。`/usr/local/bin/perl` 5.36 には DBI が無いので注意）。
 - DB `nenpyo` は作成済み。スキーマは `ddl/` にリレーションごとに置いてある。
-  新規構築は依存順に流す: `for f in users sessions events; do psql -d nenpyo -f ddl/$f.sql; done`。
+  新規構築は依存順に流す: `for f in users sessions events tags event_tags; do psql -d nenpyo -f ddl/$f.sql; done`。
 - CGI は suexec で `sugawara` として動くため、peer 認証でパスワード無し接続できる。

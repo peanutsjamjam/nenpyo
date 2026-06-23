@@ -11,6 +11,7 @@ export type EventItem = {
   end_day: number | null
   title: string
   detail: string
+  tag_ids: number[]
   created: number
   updated: number
 }
@@ -24,6 +25,20 @@ export type EventInput = {
   end_day: number | null
   title: string
   detail: string
+  tag_ids: number[]
+}
+
+export type Tag = {
+  id: number
+  name: string
+  color: string
+  prime: boolean
+}
+
+export type TagInput = {
+  name: string
+  color?: string
+  prime?: boolean
 }
 
 const API = `${import.meta.env.BASE_URL}api.cgi`
@@ -57,18 +72,24 @@ export const api = {
   createEvent: (e: EventInput) => call<EventItem>('POST', 'event', { body: e }),
   updateEvent: (id: number, e: EventInput) => call<EventItem>('PUT', 'event', { id, body: e }),
   deleteEvent: (id: number) => call<{ ok: true }>('DELETE', 'event', { id }),
+  listTags: () => call<Tag[]>('GET', 'tags'),
+  createTag: (t: TagInput) => call<Tag>('POST', 'tag', { body: t }),
+  updateTag: (id: number, t: TagInput) => call<Tag>('PUT', 'tag', { id, body: t }),
+  deleteTag: (id: number) => call<{ ok: true }>('DELETE', 'tag', { id }),
 }
 
-// 年の表示（負値=紀元前）
-export function formatYear(year: number): string {
-  return year < 0 ? `紀元前${-year}年` : `${year}年`
+// 年の AD/BC 表記。BC は数字の後ろ、AD は数字の前。西暦1000年以上は「AD」を付けない。
+export function formatYearAD(year: number): string {
+  if (year < 0) return `${-year} BC`
+  if (year >= 1000) return `${year}`
+  return `AD ${year}`
 }
 
-// 年月日をまとめて表示
-export function formatDate(year: number, month: number | null, day: number | null): string {
-  let s = formatYear(year)
+// 年月日を AD/BC 表記でまとめて表示（「年」は使わず、月日はそのまま）。
+export function formatDateAD(year: number, month: number | null, day: number | null): string {
+  let s = formatYearAD(year)
   if (month != null) {
-    s += `${month}月`
+    s += ` ${month}月`
     if (day != null) s += `${day}日`
   }
   return s
@@ -99,6 +120,8 @@ export function parseDateText(text: string): ParsedDate {
   const year = sign * nums[0]
   const month = nums.length >= 2 ? nums[1] : null
   const day = nums.length >= 3 ? nums[2] : null
+  // 西暦0年は存在しない（紀元前1年の翌日は西暦1年）。紀元前は先頭に「-」（例: -1）。
+  if (year === 0) throw new Error('西暦0年は存在しません（紀元前は先頭に「-」、例: -1）')
   if (month != null && (month < 1 || month > 12)) throw new Error(`月が範囲外です: ${month}`)
   if (day != null && (day < 1 || day > 31)) throw new Error(`日が範囲外です: ${day}`)
   return { year, month, day }
@@ -115,12 +138,12 @@ export function dateToText(year: number | null, month: number | null, day: numbe
   return s
 }
 
-// 開始〜終了をまとめて表示。終了が無ければ開始のみ。
-export function formatRange(e: {
+// 開始〜終了を AD/BC 表記でまとめて表示。終了が無ければ開始のみ。
+export function formatRangeAD(e: {
   start_year: number; start_month: number | null; start_day: number | null
   end_year: number | null; end_month: number | null; end_day: number | null
 }): string {
-  const start = formatDate(e.start_year, e.start_month, e.start_day)
+  const start = formatDateAD(e.start_year, e.start_month, e.start_day)
   if (e.end_year == null) return start
-  return `${start} 〜 ${formatDate(e.end_year, e.end_month, e.end_day)}`
+  return `${start} 〜 ${formatDateAD(e.end_year, e.end_month, e.end_day)}`
 }

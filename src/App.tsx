@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
-import { api, formatRange, formatYear, parseDateText, dateToText, type EventItem, type EventInput } from './api'
+import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, Settings, Check, X, Pencil } from 'lucide-react'
+import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
 
 // ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
@@ -105,11 +105,27 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
   )
 }
 
-// 年月日を「小数の年」に変換（バーの位置計算用）。月日が無ければ開始は年頭・終了は年末扱い。
+// 年月日を「時間軸の座標」に変換（バー・グリッドの位置計算用）。
+// 西暦0年は存在しないので AD1 を座標 0 とし、AD と BC を隙間なく連続させる。
+//   AD年(>=1): pos = (year-1) + 月日の小数   → AD1 の頭が 0
+//   BC年(<=-1): pos =  year   + 月日の小数   → 1BC は [-1, 0) を占め、12/31 が AD1/1/1 の直前に来る
+// 月日が無ければ開始は年頭・終了は年末扱い。
 function fracYear(year: number, month: number | null, day: number | null): number {
   const m = (month ?? 1) - 1
   const d = (day ?? 1) - 1
-  return year + (m + d / 31) / 12
+  const frac = (m + d / 31) / 12
+  return (year >= 1 ? year - 1 : year) + frac
+}
+
+// 時間軸の座標 → 年・月（fracYear の逆変換）。0年は無いので AD は +1 のずれを補正。
+function posToYM(pos: number): { year: number; month: number } {
+  const monthsTotal = Math.round(pos * 12)
+  if (pos >= 0) {
+    const ym1 = Math.floor(monthsTotal / 12)
+    return { year: ym1 + 1, month: monthsTotal - ym1 * 12 + 1 }
+  }
+  const year = Math.floor(monthsTotal / 12)
+  return { year, month: monthsTotal - year * 12 + 1 }
 }
 
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
@@ -117,7 +133,7 @@ function fracYear(year: number, month: number | null, day: number | null): numbe
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
@@ -127,33 +143,67 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   yearsVisible: number
   setYearsVisible: (updater: (v: number) => number) => void
   invertZoom: boolean
+  tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Shift+ホイールでスケール変更。passive:false でページスクロールを抑止するため native で登録。
+  // ホイール操作: Ctrl=拡大縮小 / Shift=左右移動 / 修飾なし=通常の上下スクロール。
+  // passive:false でページスクロールを抑止するため native で登録。
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const onWheel = (ev: WheelEvent) => {
-      if (!ev.shiftKey) return
+      // 修飾キーが無ければブラウザ既定の上下スクロールに任せる
+      if (!ev.ctrlKey && !ev.shiftKey) return
       ev.preventDefault()
       // Shift 押下時はブラウザが deltaY を deltaX に変換することがあるため、大きい方を使う
       const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
       if (delta === 0) return
-      // 既定: 奥に回す(delta>0)と表示幅拡大=縮小表示。設定で方向を反転できる。
-      const zoomOut = invertZoom ? delta < 0 : delta > 0
-      const factor = zoomOut ? 1.2 : 1 / 1.2
-      setYearsVisible((v) => Math.min(40000, Math.max(1, v * factor)))
+      if (ev.ctrlKey) {
+        // Ctrl+ホイール: 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
+        const zoomOut = invertZoom ? delta < 0 : delta > 0
+        const factor = zoomOut ? 1.2 : 1 / 1.2
+        setYearsVisible((v) => Math.min(40000, Math.max(1, v * factor)))
+      } else {
+        // Shift+ホイール: 左右にパン。移動量は表示幅に比例させる。
+        const step = (delta > 0 ? 1 : -1) * yearsVisible / 10
+        setCenterYear((y) => y + step)
+      }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setYearsVisible, invertZoom])
+  }, [setYearsVisible, setCenterYear, invertZoom, yearsVisible])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
-  const zero = rangeStart <= 0 && rangeEnd >= 0 ? pct(0) : null
+  // 矢印ボタン1回の移動量。表示幅に比例（約1割）させ、広いスケールでは大きく動かす。
+  const panStep = Math.max(1, yearsVisible / 10)
+
+  // スケールに応じた縦グリッド線。1ヶ月〜10万年の刻みから、
+  // 線が最大21本（=20区間）以内に収まる最も細かい刻みを選ぶ。
+  const GRID_STEPS = [1 / 12, 1, 10, 100, 1000, 10000, 100000]
+  let gridStep = GRID_STEPS[GRID_STEPS.length - 1]
+  for (const iv of GRID_STEPS) {
+    if (yearsVisible / iv <= 20) { gridStep = iv; break }
+  }
+  const gridLines: { left: number; major: boolean; label: string }[] = []
+  const kStart = Math.ceil(rangeStart / gridStep)
+  const kEnd = Math.floor(rangeEnd / gridStep)
+  for (let k = kStart; k <= kEnd && gridLines.length < 60; k++) {
+    const y = k * gridStep
+    const { year: yr, month: mo } = posToYM(y)
+    let label: string
+    if (gridStep >= 1) {
+      label = formatYearAD(yr) // 年単位の刻み
+    } else {
+      // 1ヶ月刻み: 1月の線には年、それ以外は「○月」を表示
+      label = mo === 1 ? formatYearAD(yr) : `${mo}月`
+    }
+    // 座標0（AD1の頭＝1BC/AD1の境目）を強調
+    gridLines.push({ left: pct(y), major: k === 0, label })
+  }
 
   const eventSpan = (e: EventItem) => {
     const s = fracYear(e.start_year, e.start_month, e.start_day)
@@ -170,33 +220,46 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     <div className="chart">
       <div className="chart-head">
         <div className="chart-axis">
-          <span className="axis-tick" style={{ left: '0%' }}>{formatYear(Math.round(rangeStart))}</span>
-          <span className="axis-tick mid" style={{ left: '50%' }}>{formatYear(Math.round(centerYear))}</span>
-          <span className="axis-tick end" style={{ left: '100%' }}>{formatYear(Math.round(rangeEnd))}</span>
+          {gridLines.map((g, i) => (
+            <span
+              key={i}
+              className={g.major ? 'axis-tick major' : 'axis-tick'}
+              style={{ left: `${g.left}%` }}
+            >{g.label}</span>
+          ))}
         </div>
       </div>
 
       <div className="chart-scroll" ref={scrollRef}>
         {visible.length === 0 ? (
-          <p className="chart-empty">この範囲に該当する出来事はありません。<br />Shift＋マウスホイールで表示範囲を変えられます。</p>
+          <p className="chart-empty">この範囲に該当する出来事はありません。<br />Ctrl＋ホイールで拡大縮小、Shift＋ホイールで左右に移動できます。</p>
         ) : (
           <div className="chart-body">
+            <div className="chart-grid">
+              {gridLines.map((g, i) => (
+                <div
+                  key={i}
+                  className={g.major ? 'chart-grid-line major' : 'chart-grid-line'}
+                  style={{ left: `${g.left}%` }}
+                />
+              ))}
+            </div>
             {visible.map((e) => {
               const { s, end } = eventSpan(e)
               const isPoint = e.end_year == null
               const left = pct(s)
               const width = Math.max(0.4, pct(end) - left)
               const labelCenter = pct(clamp((s + end) / 2, rangeStart, rangeEnd))
+              const barColor = e.tag_ids.length ? tagColors.get(e.tag_ids[0]) : undefined
               return (
                 <div
                   className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
                   key={e.id}
                   onClick={() => onSelect(e.id)}
-                  title={`${e.title || '（無題）'}（${formatRange(e)}）`}
+                  title={`${e.title || '（無題）'}（${formatRangeAD(e)}）`}
                 >
                   <div className="chart-track">
-                    {zero != null && <div className="chart-zero" style={{ left: `${zero}%` }} />}
-                    <div className={isPoint ? 'chart-bar point' : 'chart-bar'} style={{ left: `${left}%`, width: `${width}%` }} />
+                    <div className={isPoint ? 'chart-bar point' : 'chart-bar'} style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }} />
                     <span
                       className="chart-bar-label"
                       style={{ left: `${labelCenter}%` }}
@@ -211,14 +274,14 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       </div>
 
       <div className="chart-hint hint">
-        <button className="chart-nav" onClick={() => setCenterYear((y) => y - 1)} aria-label="中心を1年戻す">
+        <button className="chart-nav" onClick={() => setCenterYear((y) => y - panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年戻す`}>
           <ChevronLeft size={18} />
         </button>
         <span className="chart-hint-text">
-          中心 {formatYear(Math.round(centerYear))}／表示幅 約{Math.round(yearsVisible).toLocaleString()}年
-          （Shift＋ホイールで拡大・縮小）
+          中心 {formatYearAD(posToYM(centerYear).year)}／表示幅 約{Math.round(yearsVisible).toLocaleString()}年
+          （Ctrl＋ホイールで拡大縮小／Shift＋ホイールで左右移動）
         </span>
-        <button className="chart-nav" onClick={() => setCenterYear((y) => y + 1)} aria-label="中心を1年進める">
+        <button className="chart-nav" onClick={() => setCenterYear((y) => y + panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年進める`}>
           <ChevronRight size={18} />
         </button>
       </div>
@@ -227,11 +290,14 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
 }
 
 // ---- 設定画面（メイン領域に表示） ------------------------------------------
-function SettingsPanel({ settings, setSettings, onClose }: {
+function SettingsPanel({ settings, setSettings, onClose, tags, onTagColorChange }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
+  tags: Tag[]
+  onTagColorChange: (t: Tag, color: string) => void
 }) {
+  const primeTags = tags.filter((t) => t.prime)
   return (
     <div className="settings-panel">
       <div className="settings-head">
@@ -262,14 +328,36 @@ function SettingsPanel({ settings, setSettings, onClose }: {
             checked={settings.invertZoom}
             onChange={(e) => setSettings((s) => ({ ...s, invertZoom: e.target.checked }))}
           />
-          <span>Shift＋ホイールの拡大・縮小の向きを逆にする</span>
+          <span>Ctrl＋ホイールの拡大・縮小の向きを逆にする</span>
         </label>
         <p className="settings-note">
-          通常はホイールを手前に回すと拡大します。チェックすると向きが反転します。
+          通常は Ctrl＋ホイールを手前に回すと拡大します。チェックすると向きが反転します。
+          （Shift＋ホイールは左右移動、修飾キーなしは上下スクロール）
         </p>
       </section>
 
-      <p className="settings-note">設定はこのブラウザに保存され、次回も保持されます。</p>
+      <section className="settings-section">
+        <h3 className="settings-label">タグの色（期間バーの色）</h3>
+        {primeTags.length === 0 ? (
+          <p className="settings-note">色を持てるタグ（prime）がありません。</p>
+        ) : (
+          <div className="tag-color-list">
+            {primeTags.map((t) => (
+              <div key={t.id} className="tag-color-row">
+                <input
+                  type="color"
+                  value={t.color}
+                  onChange={(e) => onTagColorChange(t, e.target.value)}
+                />
+                <span className="tag-color-name">{t.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="settings-note">色を持てるのは prime のタグだけです。複数のタグを付けた出来事は、タグ名で先頭になる色が使われます。</p>
+      </section>
+
+      <p className="settings-note">テーマ・操作の設定はこのブラウザに保存されます（タグの色はサーバーに保存）。</p>
     </div>
   )
 }
@@ -290,9 +378,22 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [isNew, setIsNew] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // タグ一覧と、編集中イベントに付けるタグID
+  const [tags, setTags] = useState<Tag[]>([])
+  const [formTagIds, setFormTagIds] = useState<number[]>([])
+  const [addingTag, setAddingTag] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState<string | null>(null) // null=色なし(prime=false)
+  const [editingTagId, setEditingTagId] = useState<number | null>(null)
+  const [editTagName, setEditTagName] = useState('')
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
+
+  // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。色を持てるのは prime のタグだけ。
+  const tagColors = new Map(tags.filter((t) => t.prime).map((t) => [t.id, t.color]))
+  const primeTagList = tags.filter((t) => t.prime)
+  const normalTagList = tags.filter((t) => !t.prime)
 
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
@@ -312,13 +413,22 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     }
   }, [])
 
-  useEffect(() => { reload() }, [reload])
+  const reloadTags = useCallback(async () => {
+    try {
+      setTags(await api.listTags())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
+  useEffect(() => { reload(); reloadTags() }, [reload, reloadTags])
 
   const selectEvent = (e: EventItem) => {
     setShowSettings(false)
     setSelectedId(e.id)
     setIsNew(false)
     setConfirmDelete(false)
+    setFormTagIds(e.tag_ids)
     resetForm(
       dateToText(e.start_year, e.start_month, e.start_day),
       dateToText(e.end_year, e.end_month, e.end_day),
@@ -331,6 +441,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setSelectedId(null)
     setIsNew(true)
     setConfirmDelete(false)
+    setFormTagIds([])
     resetForm(String(new Date().getFullYear()))
   }
 
@@ -340,7 +451,85 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setIsNew(false)
     setConfirmDelete(false)
     setError('')
+    setFormTagIds([])
     resetForm()
+  }
+
+  // 普通の（prime でない）タグ: 好きなだけトグル
+  const toggleFormTag = (id: number) => {
+    setFormTagIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
+  }
+
+  // プライムタグ: 1つだけ選べる。選び直すと差し替え、同じものを再度押すと解除。
+  const selectPrimeTag = (id: number) => {
+    setFormTagIds((ids) => {
+      const primeIds = new Set(tags.filter((t) => t.prime).map((t) => t.id))
+      const withoutPrime = ids.filter((x) => !primeIds.has(x))
+      return ids.includes(id) ? withoutPrime : [...withoutPrime, id]
+    })
+  }
+
+  const addTag = async () => {
+    const name = newTagName.trim()
+    if (name === '') { setAddingTag(false); setNewTagName(''); setNewTagColor(null); return }
+    try {
+      // 色を選んでいれば prime=true のタグ、選んでいなければ色なし(prime=false)で作成
+      await api.createTag(newTagColor ? { name, color: newTagColor, prime: true } : { name })
+      setNewTagName(''); setNewTagColor(null); setAddingTag(false)
+      await reloadTags()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // タグ名編集中に色見本をクリックして色を選んだとき: prime=true にして色を設定（即時保存）
+  const pickTagColor = async (t: Tag, color: string) => {
+    try {
+      await api.updateTag(t.id, { name: t.name, color, prime: true })
+      await reloadTags()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const deleteTag = async (id: number) => {
+    try {
+      await api.deleteTag(id)
+      setFormTagIds((ids) => ids.filter((x) => x !== id))
+      setEditingTagId(null)
+      await reloadTags()
+      await reload() // イベントの tag_ids も更新される
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const startEditTag = (t: Tag) => {
+    setAddingTag(false)
+    setEditingTagId(t.id)
+    setEditTagName(t.name)
+  }
+
+  const saveTagName = async (t: Tag) => {
+    const name = editTagName.trim()
+    if (name === '' || name === t.name) { setEditingTagId(null); return }
+    try {
+      // 名前のみ変更。色は現状を維持して送る（prime はサーバー側で保持される）
+      await api.updateTag(t.id, { name, color: t.color })
+      setEditingTagId(null)
+      await reloadTags()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const changeTagColor = async (t: Tag, color: string) => {
+    try {
+      await api.updateTag(t.id, { name: t.name, color })
+      await reloadTags()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const save = async () => {
@@ -353,7 +542,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       input = {
         start_year: start.year, start_month: start.month, start_day: start.day,
         end_year: end.year, end_month: end.month, end_day: end.day,
-        title, detail,
+        title, detail, tag_ids: formTagIds,
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -410,20 +599,84 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           <button className="new-btn" onClick={startNew}><Plus size={16} /> 出来事を追加</button>
           {events.length === 0 && <p className="empty">まだ出来事がありません。<br />「出来事を追加」から登録してください。</p>}
           <ul className="timeline">
-            {events.map((e) => (
-              <li
-                key={e.id}
-                className={e.id === selectedId ? 'tl-item selected' : 'tl-item'}
-                onClick={() => selectEvent(e)}
-              >
-                <div className="tl-dot" />
-                <div className="tl-content">
-                  <div className="tl-date">{formatRange(e)}</div>
-                  <div className="tl-title">{e.title || '（無題）'}</div>
-                </div>
-              </li>
-            ))}
+            {events.map((e) => {
+              const dotColor = e.tag_ids.length ? tagColors.get(e.tag_ids[0]) : undefined
+              return (
+                <li
+                  key={e.id}
+                  className={e.id === selectedId ? 'tl-item selected' : 'tl-item'}
+                  onClick={() => selectEvent(e)}
+                >
+                  <div className="tl-dot" style={dotColor ? { borderColor: dotColor } : undefined} />
+                  <div className="tl-content">
+                    <div className="tl-date">{formatRangeAD(e)}</div>
+                    <div className="tl-title">{e.title || '（無題）'}</div>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
+
+          <div className="tag-section">
+            <div className="tag-section-head">
+              <span className="tag-section-title">タグ</span>
+              <button className="tag-add-btn" title="タグを追加" onClick={() => { setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
+                <Plus size={15} />
+              </button>
+            </div>
+            {addingTag && (
+              <div className="tag-add-row">
+                <label
+                  className={(newTagColor ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
+                  style={newTagColor ? { background: newTagColor } : undefined}
+                  title="クリックで色を選ぶ（プライムタグにする）"
+                >
+                  <input type="color" value={newTagColor ?? '#9a6b3f'} onChange={(ev) => setNewTagColor(ev.target.value)} />
+                </label>
+                <input
+                  autoFocus
+                  value={newTagName}
+                  placeholder="タグ名"
+                  onChange={(ev) => setNewTagName(ev.target.value)}
+                  onKeyDown={(ev) => { if (ev.key === 'Enter') addTag(); if (ev.key === 'Escape') { setAddingTag(false); setNewTagName(''); setNewTagColor(null) } }}
+                />
+                <button className="tag-icon-btn" title="追加" onClick={addTag}><Check size={15} /></button>
+                <button className="tag-icon-btn" title="やめる" onClick={() => { setAddingTag(false); setNewTagName('') }}><X size={15} /></button>
+              </div>
+            )}
+            {tags.length === 0 && !addingTag && <p className="tag-empty">「＋」でタグを作成できます。</p>}
+            <ul className="tag-list">
+              {tags.map((t) => (
+                editingTagId === t.id ? (
+                  <li key={t.id} className="tag-add-row">
+                    <label
+                      className={(t.prime ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
+                      style={t.prime ? { background: t.color } : undefined}
+                      title="クリックで色を選ぶ（プライムタグにする）"
+                    >
+                      <input type="color" value={t.prime ? t.color : '#9a6b3f'} onChange={(ev) => pickTagColor(t, ev.target.value)} />
+                    </label>
+                    <input
+                      autoFocus
+                      value={editTagName}
+                      placeholder="タグ名"
+                      onChange={(ev) => setEditTagName(ev.target.value)}
+                      onKeyDown={(ev) => { if (ev.key === 'Enter') saveTagName(t); if (ev.key === 'Escape') setEditingTagId(null) }}
+                    />
+                    <button className="tag-icon-btn" title="保存" onClick={() => saveTagName(t)}><Check size={15} /></button>
+                    <button className="tag-icon-btn" title="削除する" onClick={() => deleteTag(t.id)}><Trash2 size={15} /></button>
+                  </li>
+                ) : (
+                  <li key={t.id} className="tag-item">
+                    <span className={t.prime ? 'tag-swatch' : 'tag-swatch none'} style={t.prime ? { background: t.color } : undefined} />
+                    <span className="tag-name">{t.name}</span>
+                    <button className="tag-icon-btn" title="タグ名を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                  </li>
+                )
+              ))}
+            </ul>
+          </div>
+
           <div className="list-foot">
             <button
               className={'gear-btn' + (showSettings ? ' active' : '')}
@@ -441,6 +694,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               settings={settings}
               setSettings={setSettings}
               onClose={() => setShowSettings(false)}
+              tags={tags}
+              onTagColorChange={changeTagColor}
             />
           ) : !editing ? (
             events.length > 0 ? (
@@ -454,6 +709,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 yearsVisible={yearsVisible}
                 setYearsVisible={setYearsVisible}
                 invertZoom={settings.invertZoom}
+                tagColors={tagColors}
               />
             ) : (
               <div className="placeholder">
@@ -489,6 +745,46 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               <label className="fld grow">詳細
                 <textarea value={detail} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} />
               </label>
+
+              <div className="fld">プライムタグ<span className="hint">（1つだけ選べます）</span>
+                {primeTagList.length === 0 ? (
+                  <p className="hint">プライムタグはありません。</p>
+                ) : (
+                  <div className="tag-picker">
+                    {primeTagList.map((t) => (
+                      <button
+                        type="button"
+                        key={t.id}
+                        className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
+                        onClick={() => selectPrimeTag(t.id)}
+                      >
+                        <span className="tag-swatch" style={{ background: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="fld">タグ<span className="hint">（いくつでも選べます）</span>
+                {normalTagList.length === 0 ? (
+                  <p className="hint">タグはありません。左の「タグ」欄から作成できます。</p>
+                ) : (
+                  <div className="tag-picker">
+                    {normalTagList.map((t) => (
+                      <button
+                        type="button"
+                        key={t.id}
+                        className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
+                        onClick={() => toggleFormTag(t.id)}
+                      >
+                        <span className="tag-swatch none" />
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {error && <div className="form-error">{error}</div>}
 

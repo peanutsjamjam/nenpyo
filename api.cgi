@@ -21,9 +21,13 @@ use MIME::Base64 ();
 #   POST   ?action=logout                          -> ログアウト
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
-#   POST   ?action=event     {year,month,day,title,detail} -> 追加
+#   POST   ?action=event     {..., tag_ids:[..]}   -> 追加
 #   PUT    ?action=event&id=<id>  {同上}           -> 更新
 #   DELETE ?action=event&id=<id>                   -> 削除
+#   GET    ?action=tags                            -> 自分のタグ一覧
+#   POST   ?action=tag       {name,color}          -> タグ作成
+#   PUT    ?action=tag&id=<id>    {name,color}     -> タグ更新
+#   DELETE ?action=tag&id=<id>                     -> タグ削除
 
 my $COOKIE_NAME  = 'nenpyo_sid';
 my $COOKIE_PATH  = '/~sugawara/nenpyo/';
@@ -176,6 +180,8 @@ sub clean_date {
         $year = 0 + $y;
         # 先史時代（縄文=前14000年頃など）も扱えるよう下限を広く取る
         fail("${label}の年が範囲外です") if $year < -1000000 || $year > 9999;
+        # 西暦0年は存在しない（1BCの翌日はAD1）。紀元前は負、紀元後は正で指定する。
+        fail("西暦0年は存在しません（紀元前は負の数、例: -1 を使ってください）") if $year == 0;
     } else {
         fail("${label}の年は必須です") if $required;
         return (undef, undef, undef);
@@ -221,9 +227,54 @@ sub event_row {
 # 数値か undef に整える小ヘルパ
 sub numornull { defined $_[0] ? 0 + $_[0] : undef }
 
+# ユーザーの全イベントについて event_id -> [tag_id...] のマップを作る。
+# タグ名昇順で並べるので、配列の先頭が「期間バーの色」に使われるタグになる。
+sub event_tag_map {
+    my ($dbh, $user_id) = @_;
+    my $rows = $dbh->selectall_arrayref(
+        'SELECT et.event_id, et.tag_id FROM event_tags et
+           JOIN tags t ON t.id = et.tag_id
+          WHERE t.user_id = ?
+          ORDER BY t.name, t.id',
+        { Slice => {} }, $user_id
+    );
+    my %map;
+    push @{ $map{ $_->{event_id} } }, 0 + $_->{tag_id} for @$rows;
+    return \%map;
+}
+
+# 1イベント分の tag_id 配列（タグ名昇順）
+sub event_tag_ids {
+    my ($dbh, $event_id) = @_;
+    my $rows = $dbh->selectcol_arrayref(
+        'SELECT et.tag_id FROM event_tags et
+           JOIN tags t ON t.id = et.tag_id
+          WHERE et.event_id = ?
+          ORDER BY t.name, t.id',
+        undef, $event_id
+    );
+    return [ map { 0 + $_ } @$rows ];
+}
+
+# イベントのタグ結びつきを与えられた tag_ids で置き換える（所有チェック込み）。
+sub set_event_tags {
+    my ($dbh, $user_id, $event_id, $tag_ids) = @_;
+    $dbh->do('DELETE FROM event_tags WHERE event_id = ?', undef, $event_id);
+    return unless ref $tag_ids eq 'ARRAY' && @$tag_ids;
+    my $sth = $dbh->prepare(
+        'INSERT INTO event_tags (event_id, tag_id)
+         SELECT ?, id FROM tags WHERE id = ? AND user_id = ?
+         ON CONFLICT DO NOTHING'
+    );
+    for my $tid (@$tag_ids) {
+        next unless defined $tid && "$tid" =~ /^\d+$/;
+        $sth->execute($event_id, 0 + $tid, $user_id);
+    }
+}
+
 # DB の文字列を数値/JSON 型に整える
 sub event_json {
-    my ($r) = @_;
+    my ($r, $tag_ids) = @_;
     return {
         id          => 0 + $r->{id},
         start_year  => 0 + $r->{start_year},
@@ -234,9 +285,32 @@ sub event_json {
         end_day     => numornull($r->{end_day}),
         title       => $r->{title},
         detail      => $r->{detail},
+        tag_ids     => $tag_ids || [],
         created     => 0 + $r->{created},
         updated     => 0 + $r->{updated},
     };
+}
+
+# タグ入力の検証。(name, color, prime) を返す。prime は省略時 false。
+sub clean_tag {
+    my ($body) = @_;
+    my $name = defined $body->{name} ? $body->{name} : '';
+    $name =~ s/^\s+|\s+$//g;
+    $name =~ s/[\r\n]/ /g;
+    fail('タグ名を入力してください') if $name eq '';
+    fail('タグ名は30文字以内にしてください') if length($name) > 30;
+    my $color = defined $body->{color} && "$body->{color}" ne '' ? $body->{color} : '#9a6b3f';
+    fail('色の形式が正しくありません（例: #aabbcc）') unless $color =~ /^#[0-9a-fA-F]{6}$/;
+    my $prime = $body->{prime} ? 1 : 0;
+    return ($name, lc $color, $prime);
+}
+
+# DBD::Pg の真偽値（既定では 1/0）を JSON 真偽へ。't'/'f' でも安全に扱う。
+sub pgbool { my $v = $_[0]; (defined $v && $v ne '' && $v ne '0' && lc $v ne 'f') ? JSON::PP::true : JSON::PP::false }
+
+sub tag_json {
+    my ($r) = @_;
+    return { id => 0 + $r->{id}, name => $r->{name}, color => $r->{color}, prime => pgbool($r->{prime}) };
 }
 
 # ---- ルーティング ----------------------------------------------------------
@@ -315,24 +389,28 @@ eval {
               ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id",
             { Slice => {} }, $u->{id}
         );
-        respond([ map { event_json($_) } @$rows ]);
+        my $map = event_tag_map($dbh, $u->{id});
+        respond([ map { event_json($_, $map->{ $_->{id} } || []) } @$rows ]);
     }
     elsif ($action eq 'event' && $method eq 'POST') {
         my $u = require_user($dbh);
-        my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event(read_body_json());
+        my $body = read_body_json();
+        my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
         my $id = $dbh->selectrow_array(
             'INSERT INTO events (user_id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail)
              VALUES (?,?,?,?,?,?,?,?,?) RETURNING id',
             undef, $u->{id}, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail
         );
-        respond(event_json(event_row($dbh, $u->{id}, $id)));
+        set_event_tags($dbh, $u->{id}, $id, $body->{tag_ids});
+        respond(event_json(event_row($dbh, $u->{id}, $id), event_tag_ids($dbh, $id)));
     }
     elsif ($action eq 'event' && $method eq 'PUT') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
         fail('not found', '404 Not Found') unless event_row($dbh, $u->{id}, $id);
-        my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event(read_body_json());
+        my $body = read_body_json();
+        my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
         $dbh->do(
             'UPDATE events SET start_year=?, start_month=?, start_day=?,
                                end_year=?, end_month=?, end_day=?,
@@ -340,13 +418,62 @@ eval {
               WHERE id=? AND user_id=?',
             undef, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $id, $u->{id}
         );
-        respond(event_json(event_row($dbh, $u->{id}, $id)));
+        set_event_tags($dbh, $u->{id}, $id, $body->{tag_ids});
+        respond(event_json(event_row($dbh, $u->{id}, $id), event_tag_ids($dbh, $id)));
     }
     elsif ($action eq 'event' && $method eq 'DELETE') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
         $dbh->do('DELETE FROM events WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'tags' && $method eq 'GET') {
+        my $u = require_user($dbh);
+        my $rows = $dbh->selectall_arrayref(
+            'SELECT id, name, color, prime FROM tags WHERE user_id = ? ORDER BY name, id',
+            { Slice => {} }, $u->{id}
+        );
+        respond([ map { tag_json($_) } @$rows ]);
+    }
+    elsif ($action eq 'tag' && $method eq 'POST') {
+        my $u = require_user($dbh);
+        # 新規タグは既定で prime=false（色を持たない）。
+        my ($name, $color, $prime) = clean_tag(read_body_json());
+        fail('同じ名前のタグが既にあります', '409 Conflict')
+            if $dbh->selectrow_array('SELECT 1 FROM tags WHERE user_id=? AND name=?', undef, $u->{id}, $name);
+        my $id = $dbh->selectrow_array(
+            'INSERT INTO tags (user_id, name, color, prime) VALUES (?,?,?,?) RETURNING id',
+            undef, $u->{id}, $name, $color, $prime
+        );
+        respond(tag_json({ id => $id, name => $name, color => $color, prime => $prime }));
+    }
+    elsif ($action eq 'tag' && $method eq 'PUT') {
+        my $u  = require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
+        fail('not found', '404 Not Found')
+            unless $dbh->selectrow_array('SELECT 1 FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        my $body = read_body_json();
+        my ($name, $color, $prime) = clean_tag($body);
+        fail('同じ名前のタグが既にあります', '409 Conflict')
+            if $dbh->selectrow_array('SELECT 1 FROM tags WHERE user_id=? AND name=? AND id<>?', undef, $u->{id}, $name, $id);
+        # prime はリクエストに含まれているときだけ更新する（設定の色変更などでは保持）。
+        if (exists $body->{prime}) {
+            $dbh->do('UPDATE tags SET name=?, color=?, prime=? WHERE id=? AND user_id=?',
+                undef, $name, $color, $prime, $id, $u->{id});
+        } else {
+            $dbh->do('UPDATE tags SET name=?, color=? WHERE id=? AND user_id=?',
+                undef, $name, $color, $id, $u->{id});
+        }
+        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, prime FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        respond(tag_json($cur));
+    }
+    elsif ($action eq 'tag' && $method eq 'DELETE') {
+        my $u  = require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
+        $dbh->do('DELETE FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }
     else {

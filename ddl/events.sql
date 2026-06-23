@@ -5,10 +5,11 @@
 CREATE TABLE events (
   id          SERIAL PRIMARY KEY,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  start_year  INTEGER NOT NULL,
+  -- 西暦0年は存在しない（紀元前1年の翌日が西暦1年）。負=紀元前、正=紀元後。
+  start_year  INTEGER NOT NULL CHECK (start_year <> 0),
   start_month SMALLINT CHECK (start_month BETWEEN 1 AND 12),
   start_day   SMALLINT CHECK (start_day   BETWEEN 1 AND 31),
-  end_year    INTEGER,
+  end_year    INTEGER CHECK (end_year <> 0),
   end_month   SMALLINT CHECK (end_month BETWEEN 1 AND 12),
   end_day     SMALLINT CHECK (end_day   BETWEEN 1 AND 31),
   title       TEXT NOT NULL DEFAULT '',
