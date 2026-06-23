@@ -250,7 +250,8 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
               const left = pct(s)
               const width = Math.max(0.4, pct(end) - left)
               const labelCenter = pct(clamp((s + end) / 2, rangeStart, rangeEnd))
-              const barColor = e.tag_ids.length ? tagColors.get(e.tag_ids[0]) : undefined
+              // 色は「色を持つ（=prime）タグ」のものを使う。tag_ids 内に普通タグが先頭に来ても拾えるよう全件から探す。
+              const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
               return (
                 <div
                   className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
@@ -600,7 +601,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           {events.length === 0 && <p className="empty">まだ出来事がありません。<br />「出来事を追加」から登録してください。</p>}
           <ul className="timeline">
             {events.map((e) => {
-              const dotColor = e.tag_ids.length ? tagColors.get(e.tag_ids[0]) : undefined
+              // 色を持つ（=prime）タグの色を使う（普通タグが先頭でも拾えるよう全件から探す）
+              const dotColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
               return (
                 <li
                   key={e.id}
