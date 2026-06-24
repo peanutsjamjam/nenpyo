@@ -5,13 +5,29 @@ import './App.css'
 
 // ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
 type Theme = 'light' | 'dark'
-type AppSettings = { theme: Theme; invertZoom: boolean }
+// マウスホイール（修飾キー別）に割り当てる動作
+type WheelAction = 'scroll' | 'pan' | 'zoom'
+const WHEEL_ACTION_LABELS: Record<WheelAction, string> = {
+  scroll: '上下スクロール',
+  pan: '左右スクロール（パン）',
+  zoom: '拡大縮小',
+}
+type AppSettings = {
+  theme: Theme
+  invertZoom: boolean
+  wheelPlain: WheelAction
+  wheelShift: WheelAction
+  wheelCtrl: WheelAction
+}
 const SETTINGS_KEY = 'nenpyo-settings'
 
 function loadSettings(): AppSettings {
   const defaults: AppSettings = {
     theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
     invertZoom: false,
+    wheelPlain: 'scroll',
+    wheelShift: 'pan',
+    wheelCtrl: 'zoom',
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
@@ -151,7 +167,7 @@ const MAX_YEARS = 40000               // 表示幅の上限
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
@@ -161,36 +177,40 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   yearsVisible: number
   setYearsVisible: (updater: (v: number) => number) => void
   invertZoom: boolean
+  wheelPlain: WheelAction
+  wheelShift: WheelAction
+  wheelCtrl: WheelAction
   tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // ホイール操作: Ctrl=拡大縮小 / Shift=左右移動 / 修飾なし=通常の上下スクロール。
+  // ホイール操作は設定（修飾キー別の割り当て）に従う。
   // passive:false でページスクロールを抑止するため native で登録。
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const onWheel = (ev: WheelEvent) => {
-      // 修飾キーが無ければブラウザ既定の上下スクロールに任せる
-      if (!ev.ctrlKey && !ev.shiftKey) return
+      // 押されている修飾キーに割り当てられた動作を選ぶ（Ctrl 優先、次に Shift、無ければ修飾なし）
+      const action = ev.ctrlKey ? wheelCtrl : ev.shiftKey ? wheelShift : wheelPlain
+      if (action === 'scroll') return // ブラウザ既定のスクロールに任せる
       ev.preventDefault()
       // Shift 押下時はブラウザが deltaY を deltaX に変換することがあるため、大きい方を使う
       const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
       if (delta === 0) return
-      if (ev.ctrlKey) {
-        // Ctrl+ホイール: 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
+      if (action === 'zoom') {
+        // 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
         const zoomOut = invertZoom ? delta < 0 : delta > 0
         const factor = zoomOut ? 1.2 : 1 / 1.2
         setYearsVisible((v) => Math.min(MAX_YEARS, Math.max(MIN_YEARS, v * factor)))
       } else {
-        // Shift+ホイール: 左右にパン。移動量は表示幅に比例させる。
+        // 左右にパン。移動量は表示幅に比例させる。
         const step = (delta > 0 ? 1 : -1) * yearsVisible / 10
         setCenterYear((y) => y + step)
       }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setYearsVisible, setCenterYear, invertZoom, yearsVisible])
+  }, [setYearsVisible, setCenterYear, invertZoom, yearsVisible, wheelPlain, wheelShift, wheelCtrl])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
@@ -322,14 +342,11 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
 }
 
 // ---- 設定画面（メイン領域に表示） ------------------------------------------
-function SettingsPanel({ settings, setSettings, onClose, tags, onTagColorChange }: {
+function SettingsPanel({ settings, setSettings, onClose }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
-  tags: Tag[]
-  onTagColorChange: (t: Tag, color: string) => void
 }) {
-  const primeTags = tags.filter((t) => t.prime)
   return (
     <div className="settings-panel">
       <div className="settings-head">
@@ -353,43 +370,39 @@ function SettingsPanel({ settings, setSettings, onClose, tags, onTagColorChange 
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">年表チャートの操作</h3>
+        <h3 className="settings-label">マウスホイールの操作</h3>
+        {([
+          ['wheelPlain', 'マウスホイール'],
+          ['wheelShift', 'Shift＋マウスホイール'],
+          ['wheelCtrl', 'Ctrl＋マウスホイール'],
+        ] as [keyof AppSettings, string][]).map(([key, label]) => (
+          <div className="wheel-row" key={key}>
+            <span className="wheel-row-label">{label}</span>
+            <select
+              className="wheel-select"
+              value={settings[key] as WheelAction}
+              onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.value as WheelAction }))}
+            >
+              {(Object.keys(WHEEL_ACTION_LABELS) as WheelAction[]).map((a) => (
+                <option key={a} value={a}>{WHEEL_ACTION_LABELS[a]}</option>
+              ))}
+            </select>
+          </div>
+        ))}
         <label className="settings-toggle">
           <input
             type="checkbox"
             checked={settings.invertZoom}
             onChange={(e) => setSettings((s) => ({ ...s, invertZoom: e.target.checked }))}
           />
-          <span>Ctrl＋ホイールの拡大・縮小の向きを逆にする</span>
+          <span>拡大・縮小の向きを逆にする</span>
         </label>
         <p className="settings-note">
-          通常は Ctrl＋ホイールを手前に回すと拡大します。チェックすると向きが反転します。
-          （Shift＋ホイールは左右移動、修飾キーなしは上下スクロール）
+          ホイールを手前に回すと拡大します（チェックで反転）。
         </p>
       </section>
 
-      <section className="settings-section">
-        <h3 className="settings-label">タグの色（期間バーの色）</h3>
-        {primeTags.length === 0 ? (
-          <p className="settings-note">色を持てるタグ（prime）がありません。</p>
-        ) : (
-          <div className="tag-color-list">
-            {primeTags.map((t) => (
-              <div key={t.id} className="tag-color-row">
-                <input
-                  type="color"
-                  value={t.color}
-                  onChange={(e) => onTagColorChange(t, e.target.value)}
-                />
-                <span className="tag-color-name">{t.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <p className="settings-note">色を持てるのは prime のタグだけです。複数のタグを付けた出来事は、タグ名で先頭になる色が使われます。</p>
-      </section>
-
-      <p className="settings-note">テーマ・操作の設定はこのブラウザに保存されます（タグの色はサーバーに保存）。</p>
+      <p className="settings-note">テーマ・操作の設定はこのブラウザに保存されます。</p>
     </div>
   )
 }
@@ -549,15 +562,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       // 名前のみ変更。色は現状を維持して送る（prime はサーバー側で保持される）
       await api.updateTag(t.id, { name, color: t.color })
       setEditingTagId(null)
-      await reloadTags()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const changeTagColor = async (t: Tag, color: string) => {
-    try {
-      await api.updateTag(t.id, { name: t.name, color })
       await reloadTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -727,8 +731,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               settings={settings}
               setSettings={setSettings}
               onClose={() => setShowSettings(false)}
-              tags={tags}
-              onTagColorChange={changeTagColor}
             />
           ) : !editing ? (
             events.length > 0 ? (
@@ -742,6 +744,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 yearsVisible={yearsVisible}
                 setYearsVisible={setYearsVisible}
                 invertZoom={settings.invertZoom}
+                wheelPlain={settings.wheelPlain}
+                wheelShift={settings.wheelShift}
+                wheelCtrl={settings.wheelCtrl}
                 tagColors={tagColors}
               />
             ) : (

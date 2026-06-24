@@ -203,14 +203,14 @@
 .settings-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
 .settings-toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
-/* 設定画面: タグの色 */
-.tag-color-list { display: flex; flex-direction: column; gap: 10px; }
-.tag-color-row { display: flex; align-items: center; gap: 12px; }
-.tag-color-row input[type="color"] {
-  width: 40px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--panel); cursor: pointer;
+/* 設定画面: マウスホイールの動作割り当て */
+.wheel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.wheel-row-label { font-size: 14px; color: var(--text); }
+.wheel-select {
+  font-family: inherit; font-size: 14px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; cursor: pointer; min-width: 200px;
 }
-.tag-color-name { font-size: 14px; color: var(--text); }
+.wheel-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
 /* 左サイドバー: タグ欄 */
 .tag-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
