@@ -222,7 +222,8 @@
   width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
   border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
 }
-.list-add-btn:hover, .tag-icon-btn:hover { color: var(--text); border-color: var(--accent); }
+.list-add-btn:hover, .tag-icon-btn:not(:disabled):hover { color: var(--text); border-color: var(--accent); }
+.tag-icon-btn:disabled { opacity: 0.3; cursor: default; }
 
 /* 左サイドバー: タグ欄 */
 .tag-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, X, Pencil } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, Check, X, Pencil } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
 
@@ -558,9 +558,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。色を持てるのは prime のタグだけ。
   const tagColors = new Map(tags.filter((t) => t.prime).map((t) => [t.id, t.color]))
-  const primeTagList = tags.filter((t) => t.prime)
+  // prime はユーザーが決めた並び順（sort_order）、普通タグはタグ名順（バックエンドの並び）。
+  const primeTagList = tags.filter((t) => t.prime).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
   const normalTagList = tags.filter((t) => !t.prime)
-  // タグ一覧の並び: イベント一覧と同じく prime を先に、その後に普通タグ（各々タグ名順）。
+  // タグ一覧の並び: prime を先に、その後に普通タグ。
   const orderedTags = [...primeTagList, ...normalTagList]
 
   // イベントが持つ prime タグの id（最大1つ）。無ければ undefined。
@@ -663,6 +664,20 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     try {
       await api.updateTag(t.id, { name: t.name, color, prime: true })
       await reloadTags()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // prime タグの並びを上(-1)/下(+1)へ入れ替えて保存する
+  const movePrimeTag = async (id: number, dir: -1 | 1) => {
+    const ids = primeTagList.map((t) => t.id)
+    const i = ids.indexOf(id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= ids.length) return
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    try {
+      setTags(await api.reorderTags(ids))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -853,6 +868,13 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                   <li key={t.id} className="tag-item">
                     <span className={t.prime ? 'tag-swatch' : 'tag-swatch none'} style={t.prime ? { background: t.color } : undefined} />
                     <span className="tag-name">{t.name}</span>
+                    {t.prime && (() => {
+                      const pi = primeTagList.findIndex((p) => p.id === t.id)
+                      return (<>
+                        <button className="tag-icon-btn" title="上へ" disabled={pi <= 0} onClick={() => movePrimeTag(t.id, -1)}><ChevronUp size={15} /></button>
+                        <button className="tag-icon-btn" title="下へ" disabled={pi >= primeTagList.length - 1} onClick={() => movePrimeTag(t.id, 1)}><ChevronDown size={15} /></button>
+                      </>)
+                    })()}
                     <button className="tag-icon-btn" title="タグ名を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
                   </li>
                 )
@@ -874,7 +896,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           ) : !editing ? (
             events.length > 0 ? (
               <TimelineChart
-                events={events}
+                events={listEvents}
                 selectedId={chartSelectedId}
                 onSelect={setChartSelectedId}
                 onEdit={selectEvent}

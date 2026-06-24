@@ -28,6 +28,7 @@ use MIME::Base64 ();
 #   POST   ?action=tag       {name,color}          -> タグ作成
 #   PUT    ?action=tag&id=<id>    {name,color}     -> タグ更新
 #   DELETE ?action=tag&id=<id>                     -> タグ削除
+#   POST   ?action=tags_reorder  {ids:[..]}        -> タグの並び順を配列順に更新
 
 my $COOKIE_NAME  = 'nenpyo_sid';
 my $COOKIE_PATH  = '/~sugawara/nenpyo/';
@@ -310,7 +311,13 @@ sub pgbool { my $v = $_[0]; (defined $v && $v ne '' && $v ne '0' && lc $v ne 'f'
 
 sub tag_json {
     my ($r) = @_;
-    return { id => 0 + $r->{id}, name => $r->{name}, color => $r->{color}, prime => pgbool($r->{prime}) };
+    return {
+        id    => 0 + $r->{id},
+        name  => $r->{name},
+        color => $r->{color},
+        prime => pgbool($r->{prime}),
+        sort_order => 0 + ($r->{sort_order} // 0),
+    };
 }
 
 # ---- ルーティング ----------------------------------------------------------
@@ -431,22 +438,43 @@ eval {
     elsif ($action eq 'tags' && $method eq 'GET') {
         my $u = require_user($dbh);
         my $rows = $dbh->selectall_arrayref(
-            'SELECT id, name, color, prime FROM tags WHERE user_id = ? ORDER BY name, id',
+            'SELECT id, name, color, prime, sort_order FROM tags WHERE user_id = ? ORDER BY name, id',
             { Slice => {} }, $u->{id}
         );
         respond([ map { tag_json($_) } @$rows ]);
     }
     elsif ($action eq 'tag' && $method eq 'POST') {
         my $u = require_user($dbh);
-        # 新規タグは既定で prime=false（色を持たない）。
+        # 新規タグは既定で prime=false（色を持たない）。並び順は末尾（最大+1）。
         my ($name, $color, $prime) = clean_tag(read_body_json());
         fail('同じ名前のタグが既にあります', '409 Conflict')
             if $dbh->selectrow_array('SELECT 1 FROM tags WHERE user_id=? AND name=?', undef, $u->{id}, $name);
-        my $id = $dbh->selectrow_array(
-            'INSERT INTO tags (user_id, name, color, prime) VALUES (?,?,?,?) RETURNING id',
-            undef, $u->{id}, $name, $color, $prime
+        my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM tags WHERE user_id=?', undef, $u->{id});
+        my $row = $dbh->selectrow_hashref(
+            'INSERT INTO tags (user_id, name, color, prime, sort_order) VALUES (?,?,?,?,?)
+             RETURNING id, name, color, prime, sort_order',
+            undef, $u->{id}, $name, $color, $prime, $next
         );
-        respond(tag_json({ id => $id, name => $name, color => $color, prime => $prime }));
+        respond(tag_json($row));
+    }
+    elsif ($action eq 'tags_reorder' && $method eq 'POST') {
+        my $u = require_user($dbh);
+        my $body = read_body_json();
+        my $ids = $body->{ids};
+        fail('ids が配列ではありません') unless ref $ids eq 'ARRAY';
+        # 配列の並び順で sort_order を 1..n に振り直す（本人のタグのみ）。
+        my $sth = $dbh->prepare('UPDATE tags SET sort_order=? WHERE id=? AND user_id=?');
+        my $pos = 0;
+        for my $tid (@$ids) {
+            next unless defined $tid && "$tid" =~ /^\d+$/;
+            $pos++;
+            $sth->execute($pos, 0 + $tid, $u->{id});
+        }
+        my $rows = $dbh->selectall_arrayref(
+            'SELECT id, name, color, prime, sort_order FROM tags WHERE user_id = ? ORDER BY name, id',
+            { Slice => {} }, $u->{id}
+        );
+        respond([ map { tag_json($_) } @$rows ]);
     }
     elsif ($action eq 'tag' && $method eq 'PUT') {
         my $u  = require_user($dbh);
@@ -466,7 +494,7 @@ eval {
             $dbh->do('UPDATE tags SET name=?, color=? WHERE id=? AND user_id=?',
                 undef, $name, $color, $id, $u->{id});
         }
-        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, prime FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, prime, sort_order FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond(tag_json($cur));
     }
     elsif ($action eq 'tag' && $method eq 'DELETE') {

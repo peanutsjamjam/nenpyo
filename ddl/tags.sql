@@ -6,6 +6,8 @@ CREATE TABLE tags (
   name       TEXT NOT NULL,
   color      TEXT NOT NULL DEFAULT '#9a6b3f',
   prime      BOOLEAN NOT NULL DEFAULT false,
+  -- 一覧での並び順（小さいほど先。現状はユーザーが prime 群の順序を変更できる）
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, name)
 );

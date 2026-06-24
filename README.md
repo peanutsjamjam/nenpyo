@@ -30,9 +30,10 @@ PostgreSQL  DB: nenpyo  (users / sessions / events / tags / event_tags)
 - **データ**: `events`。開始 `start_year`（必須・負値=紀元前）/`start_month`/`start_day`、
   終了 `end_year`/`end_month`/`end_day`（すべて任意。終了なし=単発の出来事）、`title`、`detail`。
   日は月とともに、月は年とともに指定する必要がある。ユーザーごとに分離。
-- **タグ**: `tags`（ユーザーごと・`name` 一意・`color` は `#rrggbb`）と `event_tags`（多対多）。
-  1つの出来事に複数タグを付けられる。期間バー／一覧ドットの色は、付けたタグのうち**タグ名昇順で先頭**の色を使う。
-  タグの作成・削除は画面左の「タグ」欄、色の変更は設定画面（歯車）で行う。
+- **タグ**: `tags`（ユーザーごと・`name` 一意・`color` は `#rrggbb`・`prime` 真偽・`sort_order`）と `event_tags`（多対多）。
+  1つの出来事に複数タグを付けられる。色を持てるのは `prime` のタグだけで、期間バー／一覧ドットの色はそれを使う。
+  一覧は prime を先・普通タグを後に表示。**prime 群はユーザーが並び替え可能**（`sort_order`、上下ボタン→`tags_reorder`）、普通タグは名前順。
+  タグの作成・削除・並び替え・色付け（prime 化）は画面左の「タグ」欄で行う。
 
 ## API（`api.cgi`、`?action=` と HTTP メソッドで分岐）
 
@@ -48,8 +49,9 @@ PostgreSQL  DB: nenpyo  (users / sessions / events / tags / event_tags)
 | DELETE | event&id=ID | 削除（本人の項目のみ） |
 | GET | tags | 自分のタグ一覧（name 昇順） |
 | POST | tag | `{name,color}` タグ作成 |
-| PUT | tag&id=ID | `{name,color}` 更新（本人のみ） |
+| PUT | tag&id=ID | `{name,color,prime?}` 更新（本人のみ。prime は指定時のみ変更） |
 | DELETE | tag&id=ID | 削除（本人のみ。event_tags はカスケード） |
+| POST | tags_reorder | `{ids:[..]}` 並び順を配列順に更新（sort_order を 1..n） |
 
 ## 開発・公開フロー
 

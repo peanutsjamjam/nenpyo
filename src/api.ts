@@ -33,6 +33,7 @@ export type Tag = {
   name: string
   color: string
   prime: boolean
+  sort_order: number
 }
 
 export type TagInput = {
@@ -76,6 +77,7 @@ export const api = {
   createTag: (t: TagInput) => call<Tag>('POST', 'tag', { body: t }),
   updateTag: (id: number, t: TagInput) => call<Tag>('PUT', 'tag', { id, body: t }),
   deleteTag: (id: number) => call<{ ok: true }>('DELETE', 'tag', { id }),
+  reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
 }
 
 // 年の AD/BC 表記。BC は数字の後ろ、AD は数字の前。西暦1000年以上は「AD」を付けない。
