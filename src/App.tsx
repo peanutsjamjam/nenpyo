@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, Settings, Check, X, Pencil } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
@@ -435,6 +435,39 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
 
+  // 左サイドバーの幅（ドラッグで変更、localStorage に保存）
+  const SIDEBAR_KEY = 'nenpyo-sidebar-width'
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const v = Number(localStorage.getItem(SIDEBAR_KEY))
+    return v >= 180 && v <= 800 ? v : 320
+  })
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_KEY, String(Math.round(sidebarWidth))) } catch { /* 無視 */ }
+  }, [sidebarWidth])
+
+  // 仕切りをドラッグして左欄の幅を変える
+  const startResize = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    const onMove = (ev: MouseEvent) => {
+      const rect = bodyRef.current?.getBoundingClientRect()
+      if (!rect) return
+      // 左欄は最小180px、メイン側に最低280px残す
+      const w = Math.min(Math.max(ev.clientX - rect.left, 180), rect.width - 280)
+      setSidebarWidth(w)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。色を持てるのは prime のタグだけ。
   const tagColors = new Map(tags.filter((t) => t.prime).map((t) => [t.id, t.color]))
   const primeTagList = tags.filter((t) => t.prime)
@@ -630,10 +663,15 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         </div>
       </header>
 
-      <div className="body">
-        <aside className="list">
-          <button className="new-btn" onClick={startNew}><Plus size={16} /> 出来事を追加</button>
-          {events.length === 0 && <p className="empty">まだ出来事がありません。<br />「出来事を追加」から登録してください。</p>}
+      <div className="body" ref={bodyRef}>
+        <aside className="list" style={{ width: sidebarWidth }}>
+          <div className="list-head">
+            <span className="list-head-title">イベント</span>
+            <button className="list-add-btn" title="出来事を追加" onClick={startNew}>
+              <Plus size={15} />
+            </button>
+          </div>
+          {events.length === 0 && <p className="empty">まだ出来事がありません。<br />右上の「＋」から登録してください。</p>}
           <ul className="timeline">
             {events.map((e) => {
               // 色を持つ（=prime）タグの色を使う（普通タグが先頭でも拾えるよう全件から探す）
@@ -655,9 +693,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           </ul>
 
           <div className="tag-section">
-            <div className="tag-section-head">
-              <span className="tag-section-title">タグ</span>
-              <button className="tag-add-btn" title="タグを追加" onClick={() => { setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
+            <div className="list-head">
+              <span className="list-head-title">タグ</span>
+              <button className="list-add-btn" title="タグを追加" onClick={() => { setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
                 <Plus size={15} />
               </button>
             </div>
@@ -724,6 +762,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             </button>
           </div>
         </aside>
+
+        <div className="splitter" onMouseDown={startResize} title="ドラッグで幅を変更" />
 
         <main className="editor">
           {showSettings ? (

@@ -19,16 +19,14 @@
 .body { display: flex; flex: 1; min-height: 0; }
 
 .list {
-  width: 320px; flex-shrink: 0; border-right: 1px solid var(--border);
+  width: 320px; flex-shrink: 0;
   background: var(--panel-2); padding: 14px;
   display: flex; flex-direction: column; min-height: 0;
 }
-.new-btn {
-  display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center;
-  background: var(--accent); color: #fff; border: none; border-radius: 8px;
-  padding: 10px; font-size: 14px; font-weight: 600; margin-bottom: 14px;
-}
-.new-btn:hover { filter: brightness(1.05); }
+
+/* 左欄とメイン欄の境界。ドラッグで左欄の幅を変える */
+.splitter { flex: 0 0 5px; cursor: col-resize; background: var(--border); }
+.splitter:hover, .splitter:active { background: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; line-height: 1.7; text-align: center; }
 
 /* タイムライン表示（リスト部分だけスクロール、歯車は下端に固定） */
@@ -212,16 +210,18 @@
 }
 .wheel-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
-/* 左サイドバー: タグ欄 */
-.tag-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.tag-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.tag-section-title { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
-.tag-add-btn, .tag-icon-btn {
+/* 左サイドバー: 一覧の見出し（イベント／タグ共通） */
+.list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.list-head-title { font-size: 16px; font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
+.list-add-btn, .tag-icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
   border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
 }
-.tag-add-btn:hover, .tag-icon-btn:hover { color: var(--text); border-color: var(--accent); }
+.list-add-btn:hover, .tag-icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* 左サイドバー: タグ欄 */
+.tag-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .tag-add-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tag-add-row input { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px; }
 .tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
@@ -247,7 +247,9 @@
 /* ---- スマホ ---- */
 @media (max-width: 640px) {
   .body { flex-direction: column; }
-  .list { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--border); }
+  /* インラインで指定した幅より優先して縦並びにする。仕切りは隠す */
+  .list { width: auto !important; max-height: 40vh; border-bottom: 1px solid var(--border); }
+  .splitter { display: none; }
   .editor { padding: 16px; }
   .fld.year { flex: 0 0 110px; }
 }
