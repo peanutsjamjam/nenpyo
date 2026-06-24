@@ -14,6 +14,7 @@
   width: 34px; height: 34px; color: var(--text);
 }
 .icon-btn:hover { background: var(--panel-2); }
+.icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 /* ---- 本体 2カラム ---- */
 .body { display: flex; flex: 1; min-height: 0; }
@@ -29,21 +30,8 @@
 .splitter:hover, .splitter:active { background: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; line-height: 1.7; text-align: center; }
 
-/* タイムライン表示（リスト部分だけスクロール、歯車は下端に固定） */
+/* タイムライン表示（リスト部分だけスクロール） */
 .timeline { list-style: none; margin: 0; padding: 0; position: relative; flex: 1; min-height: 0; overflow-y: auto; }
-
-/* サイドバー下端の設定（歯車）ボタン */
-.list-foot {
-  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
-  display: flex; justify-content: flex-start;
-}
-.gear-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
-}
-.gear-btn:hover { color: var(--text); border-color: var(--accent); }
-.gear-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .timeline::before {
   content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px;
   width: 2px; background: var(--border);
@@ -70,9 +58,9 @@
   display: flex; align-items: flex-end; padding-bottom: 6px; margin-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
-.chart-axis { position: relative; flex: 1; height: 16px; }
+.chart-axis { position: relative; flex: 1; height: 19px; }
 /* 各縦グリッド線の真上に、その線が表す年（または月）を中央寄せで表示 */
-.axis-tick { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.axis-tick { position: absolute; transform: translateX(-50%); font-size: 13px; color: var(--muted); white-space: nowrap; }
 .axis-tick.major { color: var(--text); font-weight: 700; }
 
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
@@ -87,26 +75,35 @@
 }
 .chart-nav:hover { background: var(--accent-soft); border-color: var(--accent); }
 
+/* 下部の水平スクロールバー（左右パン用） */
+.chart-hbar { position: relative; height: 12px; margin-top: 8px; background: var(--panel-2); border-radius: 6px; }
+.chart-hthumb {
+  position: absolute; top: 0; bottom: 0; min-width: 16px;
+  background: var(--scrollbar-thumb); border-radius: 6px; cursor: grab;
+}
+.chart-hthumb:hover { filter: brightness(0.92); }
+.chart-hthumb:active { cursor: grabbing; }
+
 .chart-body { position: relative; min-height: 100%; }
 /* スケール連動の縦グリッド線（全行の背面に1枚で敷く） */
 .chart-grid { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .chart-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
 .chart-grid-line.major { background: var(--muted); }
-.chart-row { position: relative; z-index: 1; height: 30px; border-radius: 6px; cursor: pointer; }
-.chart-row:hover { background: var(--panel-2); }
+.chart-row { position: relative; z-index: 1; height: 34px; }
 /* 選択は行全体ではなく、実際の期間バーの周囲だけにリング表示する */
 .chart-row.selected .chart-bar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .chart-track { position: relative; width: 100%; height: 100%; }
 .chart-bar {
   position: absolute; top: 50%; transform: translateY(-50%);
-  height: 22px; min-width: 6px; border-radius: 11px; background: var(--accent);
+  height: 26px; min-width: 6px; border-radius: 13px; background: var(--accent); cursor: pointer;
 }
-.chart-row:hover .chart-bar { filter: brightness(1.08); }
+/* 反応するのはバーの上だけ。かすかに明るくする。 */
+.chart-bar:hover { filter: brightness(1.1); }
 
 /* 期間バーに被せて中央に表示するタイトル。バー上でも背景上でも読めるよう縁取り */
 .chart-bar-label {
   position: absolute; top: 50%; transform: translate(-50%, -50%);
-  font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--text);
+  font-size: 14px; font-weight: 700; white-space: nowrap; color: var(--text);
   cursor: pointer; user-select: none;
   text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg);
 }
@@ -213,6 +210,13 @@
 /* 左サイドバー: 一覧の見出し（イベント／タグ共通） */
 .list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .list-head-title { font-size: 16px; font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
+/* 見出し左の畳む/展開ボタン（▼/▶ ＋ タイトル） */
+.list-collapse {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; border: none; padding: 0; cursor: pointer; color: var(--muted);
+}
+.list-collapse:hover { color: var(--text); }
+.list-collapse:hover .list-head-title { color: var(--text); }
 .list-add-btn, .tag-icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;

@@ -8,6 +8,7 @@
   --accent: #9a6b3f;
   --accent-soft: #f0e3d4;
   --danger: #c0473b;
+  --scrollbar-thumb: #c1c1c1;   /* ネイティブの縦スクロールバーに近いグレー */
 
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
@@ -26,6 +27,7 @@
     --accent: #c79a6b;
     --accent-soft: #3a3026;
     --danger: #e0796d;
+    --scrollbar-thumb: #6b6b6b;
   }
 }
 
@@ -39,6 +41,7 @@
   --accent: #c79a6b;
   --accent-soft: #3a3026;
   --danger: #e0796d;
+  --scrollbar-thumb: #6b6b6b;
 }
 
 * { box-sizing: border-box; }

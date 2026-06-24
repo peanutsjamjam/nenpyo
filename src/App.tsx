@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, Settings, Check, X, Pencil } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, X, Pencil } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
 
@@ -183,6 +183,12 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const hbarRef = useRef<HTMLDivElement>(null)
+  // メインエリア上のカーソルが指す年月日（カーソルが外にあるとき null）
+  const [hoverDate, setHoverDate] = useState<{ year: number; month: number; day: number } | null>(null)
+  // ネイティブの wheel ハンドラから最新の中心・表示幅を読むための ref
+  const viewRef = useRef({ centerYear, yearsVisible })
+  viewRef.current = { centerYear, yearsVisible }
 
   // ホイール操作は設定（修飾キー別の割り当て）に従う。
   // passive:false でページスクロールを抑止するため native で登録。
@@ -197,20 +203,31 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       // Shift 押下時はブラウザが deltaY を deltaX に変換することがあるため、大きい方を使う
       const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
       if (delta === 0) return
+      const { centerYear: cy, yearsVisible: yv } = viewRef.current
       if (action === 'zoom') {
         // 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
         const zoomOut = invertZoom ? delta < 0 : delta > 0
         const factor = zoomOut ? 1.2 : 1 / 1.2
-        setYearsVisible((v) => Math.min(MAX_YEARS, Math.max(MIN_YEARS, v * factor)))
+        const newYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, yv * factor))
+        // カーソルが指す日付（座標）を固定したまま拡大縮小する
+        const rect = el.getBoundingClientRect()
+        const w = el.clientWidth
+        const f = w > 0 ? Math.min(Math.max((ev.clientX - rect.left) / w, 0), 1) : 0.5
+        const cursorPos = (cy - yv / 2) + f * yv
+        const newCenter = cursorPos - f * newYV + newYV / 2
+        viewRef.current = { centerYear: newCenter, yearsVisible: newYV }
+        setYearsVisible(() => newYV)
+        setCenterYear(() => newCenter)
       } else {
         // 左右にパン。移動量は表示幅に比例させる。
-        const step = (delta > 0 ? 1 : -1) * yearsVisible / 10
-        setCenterYear((y) => y + step)
+        const newCenter = cy + (delta > 0 ? 1 : -1) * yv / 10
+        viewRef.current = { centerYear: newCenter, yearsVisible: yv }
+        setCenterYear(() => newCenter)
       }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setYearsVisible, setCenterYear, invertZoom, yearsVisible, wheelPlain, wheelShift, wheelCtrl])
+  }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
@@ -260,6 +277,55 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     return { s, end }
   }
 
+  // 下部の水平スクロールバー: 全イベントの範囲内を左右にパンする。
+  let contentMin = Infinity
+  let contentMax = -Infinity
+  for (const e of events) {
+    const { s, end } = eventSpan(e)
+    if (s < contentMin) contentMin = s
+    if (end > contentMax) contentMax = end
+  }
+  const hasContent = isFinite(contentMin) && contentMax > contentMin
+  const total = hasContent ? contentMax - contentMin : yearsVisible
+  const thumbW = Math.max(2, Math.min(100, (yearsVisible / total) * 100)) // つまみ幅(%)
+  const panRange = total - yearsVisible                                   // 動ける幅(年)
+  const thumbF = panRange > 0 ? clamp((rangeStart - contentMin) / panRange, 0, 1) : 0
+  const thumbLeft = thumbF * (100 - thumbW)
+  const startHPan = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    const track = hbarRef.current?.getBoundingClientRect()
+    if (!track || panRange <= 0) return
+    const usablePx = track.width * (1 - thumbW / 100)
+    if (usablePx <= 0) return
+    const startX = e.clientX
+    const startCenter = centerYear
+    const onMove = (ev: MouseEvent) => {
+      const df = (ev.clientX - startX) / usablePx
+      const c = clamp(startCenter + df * panRange, contentMin + yearsVisible / 2, contentMax - yearsVisible / 2)
+      setCenterYear(() => c)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  // チャート描画域内のマウス x 座標から、指している年月日を求める。
+  const dateAtX = (clientX: number): { year: number; month: number; day: number } | null => {
+    const el = scrollRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    const w = el.clientWidth
+    if (w <= 0) return null
+    const f = (clientX - rect.left) / w     // 描画域内での横位置 0..1
+    const pos = rangeStart + f * yearsVisible // 時間軸座標
+    return posToYMD(pos)
+  }
+
   return (
     <div className="chart">
       <div className="chart-head">
@@ -274,7 +340,12 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         </div>
       </div>
 
-      <div className="chart-scroll" ref={scrollRef}>
+      <div
+        className="chart-scroll"
+        ref={scrollRef}
+        onMouseMove={(e) => setHoverDate(dateAtX(e.clientX))}
+        onMouseLeave={() => setHoverDate(null)}
+      >
         <div className="chart-body">
           <div className="chart-grid">
             {gridLines.map((g, i) => (
@@ -302,20 +373,27 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             let labelText = title
             if (offLeft) { labelClass += ' at-left'; labelLeft = 0; labelText = `◀ ${title}` }
             else if (offRight) { labelClass += ' at-right'; labelLeft = 100; labelText = `${title} ▶` }
+            const tip = `${title}（${formatRangeAD(e)}）`
             return (
               <div
                 className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
                 key={e.id}
-                onClick={() => onSelect(e.id)}
-                title={`${title}（${formatRangeAD(e)}）`}
               >
                 <div className="chart-track">
+                  {/* 反応するのは期間バーとタイトルだけ。バー外の余白は無反応。 */}
                   {!offLeft && !offRight && (
-                    <div className="chart-bar" style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }} />
+                    <div
+                      className="chart-bar"
+                      style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }}
+                      title={tip}
+                      onClick={() => onSelect(e.id)}
+                    />
                   )}
                   <span
                     className={labelClass}
                     style={{ left: `${labelLeft}%` }}
+                    title={tip}
+                    onClick={() => onSelect(e.id)}
                     onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
                   >{labelText}</span>
                 </div>
@@ -325,13 +403,20 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         </div>
       </div>
 
+      {hasContent && (
+        <div className="chart-hbar" ref={hbarRef} title="ドラッグで左右に移動">
+          <div className="chart-hthumb" style={{ left: `${thumbLeft}%`, width: `${thumbW}%` }} onMouseDown={startHPan} />
+        </div>
+      )}
+
       <div className="chart-hint hint">
         <button className="chart-nav" onClick={() => setCenterYear((y) => y - panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年戻す`}>
           <ChevronLeft size={18} />
         </button>
         <span className="chart-hint-text">
-          中心 {formatYearAD(posToYM(centerYear).year)}／表示幅 約{Math.round(yearsVisible).toLocaleString()}年
-          （Ctrl＋ホイールで拡大縮小／Shift＋ホイールで左右移動）
+          {hoverDate
+            ? `${formatYearAD(hoverDate.year)} ${hoverDate.month}月${hoverDate.day}日`
+            : 'カーソルを年表に合わせると日付を表示します'}
         </span>
         <button className="chart-nav" onClick={() => setCenterYear((y) => y + panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年進める`}>
           <ChevronRight size={18} />
@@ -431,6 +516,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [newTagColor, setNewTagColor] = useState<string | null>(null) // null=色なし(prime=false)
   const [editingTagId, setEditingTagId] = useState<number | null>(null)
   const [editTagName, setEditTagName] = useState('')
+  // 左サイドバーの一覧の畳み状態
+  const [eventsCollapsed, setEventsCollapsed] = useState(false)
+  const [tagsCollapsed, setTagsCollapsed] = useState(false)
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
@@ -472,6 +560,16 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const tagColors = new Map(tags.filter((t) => t.prime).map((t) => [t.id, t.color]))
   const primeTagList = tags.filter((t) => t.prime)
   const normalTagList = tags.filter((t) => !t.prime)
+  // タグ一覧の並び: イベント一覧と同じく prime を先に、その後に普通タグ（各々タグ名順）。
+  const orderedTags = [...primeTagList, ...normalTagList]
+
+  // イベントが持つ prime タグの id（最大1つ）。無ければ undefined。
+  const primeIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
+  // 左の一覧の並び: prime タグ付きを先に（同一 prime でまとめ、タグ名順）、その後に prime なし。
+  const listEvents = [
+    ...primeTagList.flatMap((t) => events.filter((e) => primeIdOf(e) === t.id)),
+    ...events.filter((e) => primeIdOf(e) == null),
+  ]
 
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
@@ -659,6 +757,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         <div className="brand" onClick={() => window.location.reload()}><ScrollText size={22} /> nenpyo</div>
         <div className="topbar-right">
           <span className="who">{username}</span>
+          <button className={'icon-btn' + (showSettings ? ' active' : '')} title="設定" onClick={() => setShowSettings(true)}><Settings size={18} /></button>
           <button className="icon-btn" title="ログアウト" onClick={logout}><LogOut size={18} /></button>
         </div>
       </header>
@@ -666,14 +765,18 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       <div className="body" ref={bodyRef}>
         <aside className="list" style={{ width: sidebarWidth }}>
           <div className="list-head">
-            <span className="list-head-title">イベント</span>
+            <button className="list-collapse" title={eventsCollapsed ? '展開する' : '畳む'} onClick={() => setEventsCollapsed((v) => !v)}>
+              {eventsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+              <span className="list-head-title">イベント</span>
+            </button>
             <button className="list-add-btn" title="出来事を追加" onClick={startNew}>
               <Plus size={15} />
             </button>
           </div>
+          {!eventsCollapsed && (<>
           {events.length === 0 && <p className="empty">まだ出来事がありません。<br />右上の「＋」から登録してください。</p>}
           <ul className="timeline">
-            {events.map((e) => {
+            {listEvents.map((e) => {
               // 色を持つ（=prime）タグの色を使う（普通タグが先頭でも拾えるよう全件から探す）
               const dotColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
               return (
@@ -691,14 +794,19 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               )
             })}
           </ul>
+          </>)}
 
           <div className="tag-section">
             <div className="list-head">
-              <span className="list-head-title">タグ</span>
-              <button className="list-add-btn" title="タグを追加" onClick={() => { setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
+              <button className="list-collapse" title={tagsCollapsed ? '展開する' : '畳む'} onClick={() => setTagsCollapsed((v) => !v)}>
+                {tagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span className="list-head-title">タグ</span>
+              </button>
+              <button className="list-add-btn" title="タグを追加" onClick={() => { setTagsCollapsed(false); setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
                 <Plus size={15} />
               </button>
             </div>
+            {!tagsCollapsed && (<>
             {addingTag && (
               <div className="tag-add-row">
                 <label
@@ -721,7 +829,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             )}
             {tags.length === 0 && !addingTag && <p className="tag-empty">「＋」でタグを作成できます。</p>}
             <ul className="tag-list">
-              {tags.map((t) => (
+              {orderedTags.map((t) => (
                 editingTagId === t.id ? (
                   <li key={t.id} className="tag-add-row">
                     <label
@@ -750,16 +858,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 )
               ))}
             </ul>
-          </div>
-
-          <div className="list-foot">
-            <button
-              className={'gear-btn' + (showSettings ? ' active' : '')}
-              title="設定"
-              onClick={() => setShowSettings(true)}
-            >
-              <Settings size={18} />
-            </button>
+            </>)}
           </div>
         </aside>
 
