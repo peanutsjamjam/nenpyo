@@ -166,6 +166,7 @@ const GRID_STEPS = [DAY, MONTH, 1, 10, 100, 1000, 10000, 100000]
 const MIN_YEARS = DAY                 // 表示幅の下限（約1日）
 const MAX_YEARS = 40000               // 表示幅の上限
 const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サイズ（CSS と一致させる）
+const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS .chart-row と一致させる）
 
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
@@ -195,12 +196,13 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   // ネイティブの wheel ハンドラから最新の中心・表示幅を読むための ref
   const viewRef = useRef({ centerYear, yearsVisible })
   viewRef.current = { centerYear, yearsVisible }
-  // チャート描画域の幅（px）。タイトルを画面端で固定する計算に使う。
+  // チャート描画域の幅・高さ（px）。幅はタイトルの端固定、高さは下方向の余白計算に使う。
   const [chartW, setChartW] = useState(0)
+  const [chartH, setChartH] = useState(0)
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const update = () => setChartW(el.clientWidth)
+    const update = () => { setChartW(el.clientWidth); setChartH(el.clientHeight) }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
@@ -374,7 +376,8 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         onMouseMove={(e) => setHoverDate(dateAtX(e.clientX))}
         onMouseLeave={() => setHoverDate(null)}
       >
-        <div className="chart-body">
+        {/* 下端に「ビューポート高さ − 1行」の余白を足し、最下段のバーも画面最上部まで上げられるようにする */}
+        <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - ROW_PX) }}>
           <div className="chart-grid">
             {gridLines.map((g, i) => (
               <div
@@ -467,7 +470,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
   onClose: () => void
 }) {
   return (
-    <div className="settings-panel">
+    <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
       <div className="settings-head">
         <h2 className="settings-title">設定</h2>
         <button className="settings-close" onClick={onClose}>閉じる</button>
@@ -818,7 +821,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         <div className="brand" onClick={() => window.location.reload()}><ScrollText size={22} /> nenpyo</div>
         <div className="topbar-right">
           <span className="who">{username}</span>
-          <button className={'icon-btn' + (showSettings ? ' active' : '')} title="設定" onClick={() => setShowSettings(true)}><Settings size={18} /></button>
+          <button className={'icon-btn' + (showSettings ? ' active' : '')} title="設定" onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
           <button className="icon-btn" title="ログアウト" onClick={logout}><LogOut size={18} /></button>
         </div>
       </header>
@@ -933,14 +936,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         <div className="splitter" onMouseDown={startResize} title="ドラッグで幅を変更" />
 
         <main className="editor">
-          {showSettings ? (
-            <SettingsPanel
-              settings={settings}
-              setSettings={setSettings}
-              onClose={() => setShowSettings(false)}
-            />
-          ) : !editing ? (
-            events.length > 0 ? (
+          {events.length > 0 ? (
               <TimelineChart
                 events={listEvents}
                 selectedId={chartSelectedId}
@@ -962,8 +958,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 <ScrollText size={48} strokeWidth={1} />
                 <p>「出来事を追加」から年表をつくりましょう。</p>
               </div>
-            )
-          ) : (
+            )}
+
+          {editing && (
+            <div className="panel-overlay">
             <div className="form">
               <div className="form-head">
                 <h2 className="form-title">{isNew ? '出来事を追加' : '出来事を編集'}</h2>
@@ -1040,6 +1038,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                   <button className="del-btn" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> 削除</button>
                 )}
               </div>
+            </div>
+            </div>
+          )}
+
+          {showSettings && (
+            <div className="panel-overlay" onClick={() => setShowSettings(false)}>
+              <SettingsPanel
+                settings={settings}
+                setSettings={setSettings}
+                onClose={() => setShowSettings(false)}
+              />
             </div>
           )}
         </main>

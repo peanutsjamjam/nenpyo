@@ -48,7 +48,13 @@
 .tl-title { font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- エディタ ---- */
-.editor { flex: 1; min-width: 0; display: flex; padding: 24px; overflow-y: auto; }
+.editor { flex: 1; min-width: 0; display: flex; padding: 24px; overflow-y: auto; position: relative; }
+
+/* 設定・編集パネルはメイン（年表）の上に重ねる。パネル外は透明で背後がそのまま見える。 */
+.panel-overlay {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; align-items: flex-start; justify-content: flex-start; padding: 16px;
+}
 .placeholder { margin: auto; text-align: center; color: var(--muted); max-width: 320px; line-height: 1.7; }
 .placeholder svg { color: var(--border); margin-bottom: 12px; }
 
@@ -108,7 +114,13 @@
   text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg);
 }
 
-.form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 640px; }
+/* 編集フォームは年表の上に重ねるカード。パネル外は背後の年表が見える。 */
+.form {
+  display: flex; flex-direction: column; gap: 16px;
+  width: min(640px, 100%); max-height: 100%; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); padding: 24px 28px;
+}
 .form-head {
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 4px;
@@ -169,7 +181,11 @@
 .modal-actions button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 
 /* ---- 設定画面（メイン領域） ---- */
-.settings-panel { flex: 1; overflow-y: auto; max-width: 560px; }
+.settings-panel {
+  width: min(520px, 100%); max-height: 100%; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); padding: 30px 36px;
+}
 .settings-head {
   display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 24px;
