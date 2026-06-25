@@ -107,9 +107,6 @@
   cursor: pointer; user-select: none;
   text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg);
 }
-/* バーが画面外のとき、タイトルを近い側の端に固定する */
-.chart-bar-label.at-left  { transform: translateY(-50%); padding-left: 4px; color: var(--muted); }
-.chart-bar-label.at-right { transform: translate(-100%, -50%); padding-right: 4px; color: var(--muted); }
 
 .form { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 640px; }
 .form-head {

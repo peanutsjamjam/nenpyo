@@ -12,12 +12,15 @@ const WHEEL_ACTION_LABELS: Record<WheelAction, string> = {
   pan: '左右スクロール（パン）',
   zoom: '拡大縮小',
 }
+// 拡大縮小の倍率（1ノッチあたり）の選択肢
+const ZOOM_FACTORS = [1.05, 1.1, 1.2, 1.3, 1.5]
 type AppSettings = {
   theme: Theme
   invertZoom: boolean
   wheelPlain: WheelAction
   wheelShift: WheelAction
   wheelCtrl: WheelAction
+  zoomFactor: number
 }
 const SETTINGS_KEY = 'nenpyo-settings'
 
@@ -28,6 +31,7 @@ function loadSettings(): AppSettings {
     wheelPlain: 'scroll',
     wheelShift: 'pan',
     wheelCtrl: 'zoom',
+    zoomFactor: 1.2,
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
@@ -161,13 +165,14 @@ const MONTH = 1 / 12
 const GRID_STEPS = [DAY, MONTH, 1, 10, 100, 1000, 10000, 100000]
 const MIN_YEARS = DAY                 // 表示幅の下限（約1日）
 const MAX_YEARS = 40000               // 表示幅の上限
+const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サイズ（CSS と一致させる）
 
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
@@ -180,6 +185,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   wheelPlain: WheelAction
   wheelShift: WheelAction
   wheelCtrl: WheelAction
+  zoomFactor: number
   tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -189,6 +195,28 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   // ネイティブの wheel ハンドラから最新の中心・表示幅を読むための ref
   const viewRef = useRef({ centerYear, yearsVisible })
   viewRef.current = { centerYear, yearsVisible }
+  // チャート描画域の幅（px）。タイトルを画面端で固定する計算に使う。
+  const [chartW, setChartW] = useState(0)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const update = () => setChartW(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  // タイトル文字幅の概算（px）。CJK は約1em、その他は約0.6em。少し大きめに見積もる。
+  const estCacheRef = useRef(new Map<string, number>())
+  const estLabelPx = (text: string): number => {
+    const cached = estCacheRef.current.get(text)
+    if (cached != null) return cached
+    let em = 0
+    for (const ch of text) em += ch.charCodeAt(0) > 0x2e7f ? 1.0 : 0.6
+    const px = em * LABEL_FONT_PX + 10 // 余白・縁取りぶん
+    estCacheRef.current.set(text, px)
+    return px
+  }
 
   // ホイール操作は設定（修飾キー別の割り当て）に従う。
   // passive:false でページスクロールを抑止するため native で登録。
@@ -207,7 +235,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       if (action === 'zoom') {
         // 拡大・縮小。奥に回す(delta>0)と縮小表示。設定で方向を反転できる。
         const zoomOut = invertZoom ? delta < 0 : delta > 0
-        const factor = zoomOut ? 1.2 : 1 / 1.2
+        const factor = zoomOut ? zoomFactor : 1 / zoomFactor
         const newYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, yv * factor))
         // カーソルが指す日付（座標）を固定したまま拡大縮小する
         const rect = el.getBoundingClientRect()
@@ -227,7 +255,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl])
+  }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
@@ -361,18 +389,24 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
           {events.map((e) => {
             const { s, end } = eventSpan(e)
             const left = pct(s)
-            const width = Math.max(0.4, pct(end) - left)
+            const right = pct(end)
+            const width = Math.max(0.4, right - left)
             // 色は「色を持つ（=prime）タグ」のものを使う。tag_ids 内に普通タグが先頭に来ても拾えるよう全件から探す。
             const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
             const title = e.title || '（無題）'
-            // バーが完全に画面外なら、タイトルを近い側の端に固定（矢印で方向を示す）
+            // バーが完全に画面外なら矢印で方向を示す
             const offLeft = end < rangeStart
             const offRight = s > rangeEnd
-            let labelClass = 'chart-bar-label'
-            let labelLeft = pct(clamp((s + end) / 2, rangeStart, rangeEnd))
-            let labelText = title
-            if (offLeft) { labelClass += ' at-left'; labelLeft = 0; labelText = `◀ ${title}` }
-            else if (offRight) { labelClass += ' at-right'; labelLeft = 100; labelText = `${title} ▶` }
+            const labelText = offLeft ? `◀ ${title}` : offRight ? `${title} ▶` : title
+            // タイトルの中心位置: 基本はバー中央。ただしタイトル全体が画面内に収まるよう、
+            // また可能ならバーの範囲内に収まるよう左右に「貼り付く」（端で固定される）。
+            const halfPct = chartW > 0 ? (estLabelPx(labelText) / 2) / chartW * 100 : 0
+            const barCenter = (left + right) / 2
+            const lo = Math.max(halfPct, left + halfPct)        // 画面左端・バー左端より内側
+            const hi = Math.min(100 - halfPct, right - halfPct) // 画面右端・バー右端より内側
+            const labelLeft = lo <= hi
+              ? clamp(barCenter, lo, hi)
+              : clamp(barCenter, halfPct, 100 - halfPct)        // バーがタイトルより短いときは画面内に収めるだけ
             const tip = `${title}（${formatRangeAD(e)}）`
             return (
               <div
@@ -390,7 +424,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
                     />
                   )}
                   <span
-                    className={labelClass}
+                    className="chart-bar-label"
                     style={{ left: `${labelLeft}%` }}
                     title={tip}
                     onClick={() => onSelect(e.id)}
@@ -474,6 +508,18 @@ function SettingsPanel({ settings, setSettings, onClose }: {
             </select>
           </div>
         ))}
+        <div className="wheel-row">
+          <span className="wheel-row-label">拡大縮小の倍率</span>
+          <select
+            className="wheel-select"
+            value={settings.zoomFactor}
+            onChange={(e) => setSettings((s) => ({ ...s, zoomFactor: Number(e.target.value) }))}
+          >
+            {ZOOM_FACTORS.map((z) => (
+              <option key={z} value={z}>{z}</option>
+            ))}
+          </select>
+        </div>
         <label className="settings-toggle">
           <input
             type="checkbox"
@@ -908,6 +954,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 wheelPlain={settings.wheelPlain}
                 wheelShift={settings.wheelShift}
                 wheelCtrl={settings.wheelCtrl}
+                zoomFactor={settings.zoomFactor}
                 tagColors={tagColors}
               />
             ) : (
