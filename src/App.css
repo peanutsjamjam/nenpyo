@@ -82,16 +82,23 @@
 }
 /* 期間バー＋水平スクロールバーをまとめる中段。開発用の枠の基準にもなる。 */
 .chart-mid { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.chart-axis { position: relative; flex: 1; height: 19px; }
-/* 各縦グリッド線の真上に、その線が表す年（または月）を中央寄せで表示 */
-.axis-tick { position: absolute; transform: translateX(-50%); font-size: 13px; color: var(--muted); white-space: nowrap; }
+.chart-axis { position: relative; flex: 1; height: 34px; }
+/* 縦線の直上に主ラベル（年/月/日）、その上の行に年。左端を縦線に合わせる（少し右に開始）。 */
+.axis-tick {
+  position: absolute; bottom: 0; padding-left: 3px;
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+  display: flex; flex-direction: column; line-height: 1.25;
+}
 .axis-tick.major { color: var(--text); font-weight: 700; }
+.axis-year { color: var(--text); }
 
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .chart-empty { color: var(--muted); text-align: center; line-height: 1.7; margin-top: 40px; }
 .chart-hint { position: relative; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
 .chart-hint-text { flex: 1; text-align: center; }
+/* メイン領域の実寸(px)。中央の日付表示を動かさないよう左に重ねて表示 */
+.chart-dims { position: absolute; left: 44px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
 .chart-nav {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; padding: 0; border-radius: 6px;

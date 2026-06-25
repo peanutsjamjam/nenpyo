@@ -165,14 +165,22 @@ function posToYMD(pos: number): { year: number; month: number; day: number } {
   return { year: pos >= 0 ? base + 1 : base, month, day }
 }
 
+// 上バー（グリッド線）用の年表記。BC の前／AD の後ろの空白を詰める。1000年以上は AD なし。
+function gridYearLabel(year: number): string {
+  if (year < 0) return `${-year}BC`
+  if (year >= 1000) return `${year}`
+  return `AD${year}`
+}
+
 // グリッド刻みとズーム範囲（座標=年単位）。最小は1日、最大は10万年スケール。
 const DAY = 1 / SLOTS_PER_YEAR        // ≈ 0.00269 年（1日）
 const MONTH = 1 / 12
-const GRID_STEPS = [DAY, MONTH, 1, 10, 100, 1000, 10000, 100000]
+const GRID_STEPS = [DAY, MONTH, 1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
 const MIN_YEARS = DAY                 // 表示幅の下限（約1日）
 const MAX_YEARS = 40000               // 表示幅の上限
 const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サイズ（CSS と一致させる）
 const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS .chart-row と一致させる）
+const MAX_GRID_LINES_AT_1000PX = 25  // メイン領域の横幅 1000px あたりの縦線の最大本数（幅に比例）
 
 // 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
 const unitWidth = (month: number | null, day: number | null) =>
@@ -300,32 +308,53 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   // 矢印ボタン1回の移動量。表示幅に比例（約1割）させ、スケールに追従させる。
   const panStep = Math.max(MIN_YEARS, yearsVisible / 10)
 
-  // スケールに応じた縦グリッド線。1日〜10万年の刻みから、
-  // 線が最大21本（=20区間）以内に収まる最も細かい刻みを選ぶ。
+  // 画面あたりの最大縦線数。メイン領域の横幅 1000px で 25 本、横幅に比例させる。
+  const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (chartW || 1000) / 1000))
+  const lineCap = maxGridLines + 8 // 安全用の打ち切り
+  // 1日〜10万年の刻みから、線が maxGridLines 以内に収まる最も細かい刻みを選ぶ。
   let gridStep = GRID_STEPS[GRID_STEPS.length - 1]
   for (const iv of GRID_STEPS) {
-    if (yearsVisible / iv <= 20) { gridStep = iv; break }
+    if (yearsVisible / iv <= maxGridLines - 1) { gridStep = iv; break }
   }
-  const gridLines: { left: number; major: boolean; label: string }[] = []
-  const kStart = Math.ceil(rangeStart / gridStep)
-  const kEnd = Math.floor(rangeEnd / gridStep)
-  for (let k = kStart; k <= kEnd && gridLines.length < 60; k++) {
-    const y = k * gridStep
-    let label: string
-    if (gridStep >= 1) {
-      const { year } = posToYM(y)
-      label = formatYearAD(year) // 年単位の刻み
-    } else if (gridStep === MONTH) {
-      // 1ヶ月刻み: 1月の線には年、それ以外は「○月」を表示
-      const { year, month } = posToYM(y)
-      label = month === 1 ? formatYearAD(year) : `${month}月`
-    } else {
-      // 1日刻み: 月初の線には月（1月なら年）、それ以外は「○日」を表示
-      const { year, month, day } = posToYMD(y)
-      label = day === 1 ? (month === 1 ? formatYearAD(year) : `${month}月`) : `${day}日`
+  // bottomLabel: 線の直上に出す主ラベル（年/月/日）。topLabel: その上に出す年（月・日表示の1月のみ）。
+  const gridLines: { left: number; major: boolean; topLabel: string; bottomLabel: string }[] = []
+  if (gridStep >= 1) {
+    // 年グリッド: 「丸い年（刻みの倍数）」＋ AD1 に線を引く（西暦0年は無い）。
+    // 例: 刻み5 なら … 10BC, 5BC, AD1, AD5, AD10 …（AD1, AD6 のようにはしない）。
+    const step = gridStep
+    const yStart = posToYM(rangeStart).year
+    const yEnd = posToYM(rangeEnd).year
+    const years = new Set<number>()
+    for (let y = Math.floor(yStart / step) * step - step; y <= Math.ceil(yEnd / step) * step + step; y += step) {
+      if (y !== 0) years.add(y) // 0年は存在しない
     }
-    // 座標0（AD1の頭＝1BC/AD1の境目）を強調
-    gridLines.push({ left: pct(y), major: k === 0, label })
+    years.add(1) // AD1 は常に
+    for (const y of Array.from(years).sort((a, b) => a - b)) {
+      const p = y >= 1 ? y - 1 : y // その年の頭の座標（AD は -1 補正）
+      if (p < rangeStart || p > rangeEnd || gridLines.length >= lineCap) continue
+      gridLines.push({ left: pct(p), major: y === 1, topLabel: '', bottomLabel: gridYearLabel(y) })
+    }
+  } else {
+    // 月・日グリッド: 等間隔（year 0 をまたがないので従来どおり）
+    const kStart = Math.ceil(rangeStart / gridStep)
+    const kEnd = Math.floor(rangeEnd / gridStep)
+    for (let k = kStart; k <= kEnd && gridLines.length < lineCap; k++) {
+      const p = k * gridStep
+      let topLabel = ''
+      let bottomLabel: string
+      if (gridStep === MONTH) {
+        // 1ヶ月刻み: どの線も「○月」を表示。1月の線には上に年を表示。
+        const { year, month } = posToYM(p)
+        bottomLabel = `${month}月`
+        if (month === 1) topLabel = gridYearLabel(year)
+      } else {
+        // 1日刻み: どの線も「○日」を表示。1日の線の上に月（1月なら「年 1月」）を表示。
+        const { year, month, day } = posToYMD(p)
+        bottomLabel = `${day}日`
+        if (day === 1) topLabel = month === 1 ? `${gridYearLabel(year)} 1月` : `${month}月`
+      }
+      gridLines.push({ left: pct(p), major: k === 0, topLabel, bottomLabel })
+    }
   }
 
   // 下部の水平スクロールバー: 全イベントの範囲内を左右にパンする。
@@ -387,7 +416,10 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
               key={i}
               className={g.major ? 'axis-tick major' : 'axis-tick'}
               style={{ left: `${g.left}%` }}
-            >{g.label}</span>
+            >
+              {g.topLabel && <span className="axis-year">{g.topLabel}</span>}
+              <span className="axis-unit">{g.bottomLabel}</span>
+            </span>
           ))}
         </div>
       </div>
@@ -476,6 +508,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         <button className="chart-nav" onClick={() => setCenterYear((y) => y - panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年戻す`}>
           <ChevronLeft size={18} />
         </button>
+        <span className="chart-dims" title="メイン領域の横幅×縦幅(px)">{Math.round(chartW)}×{Math.round(chartH)}</span>
         <span className="chart-hint-text">
           {hoverDate
             ? `${formatYearAD(hoverDate.year)} ${hoverDate.month}月${hoverDate.day}日`
