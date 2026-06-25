@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, Check, X, Pencil } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, Check, X, Pencil, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
+
+// 開発用ボタンの表示フラグ。本番で隠す／不要になったら false に（または削除）。
+const DEV_BUTTON = true
 
 // ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
 type Theme = 'light' | 'dark'
@@ -173,7 +176,7 @@ const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, devOverlay, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
@@ -187,6 +190,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   wheelShift: WheelAction
   wheelCtrl: WheelAction
   zoomFactor: number
+  devOverlay: boolean
   tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -359,6 +363,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   return (
     <div className="chart">
       <div className="chart-head">
+        {devOverlay && <div className="dev-box"><span className="dev-label">上バー</span></div>}
         <div className="chart-axis">
           {gridLines.map((g, i) => (
             <span
@@ -370,6 +375,8 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         </div>
       </div>
 
+      <div className="chart-mid">
+        {devOverlay && <div className="dev-box"><span className="dev-label">メイン領域</span></div>}
       <div
         className="chart-scroll"
         ref={scrollRef}
@@ -445,8 +452,10 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
           <div className="chart-hthumb" style={{ left: `${thumbLeft}%`, width: `${thumbW}%` }} onMouseDown={startHPan} />
         </div>
       )}
+      </div>
 
       <div className="chart-hint hint">
+        {devOverlay && <div className="dev-box"><span className="dev-label">下バー</span></div>}
         <button className="chart-nav" onClick={() => setCenterYear((y) => y - panStep)} aria-label={`中心を約${Math.round(panStep).toLocaleString()}年戻す`}>
           <ChevronLeft size={18} />
         </button>
@@ -568,6 +577,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 左サイドバーの一覧の畳み状態
   const [eventsCollapsed, setEventsCollapsed] = useState(false)
   const [tagsCollapsed, setTagsCollapsed] = useState(false)
+  // 開発用: メイン領域を可視化するオーバーレイ
+  const [devOverlay, setDevOverlay] = useState(false)
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
@@ -818,7 +829,18 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand" onClick={() => window.location.reload()}><ScrollText size={22} /> nenpyo</div>
+        <div className="topbar-left">
+          <div className="brand" onClick={() => window.location.reload()}><ScrollText size={22} /> nenpyo</div>
+          {DEV_BUTTON && (
+            <button
+              className={'icon-btn dev-btn' + (devOverlay ? ' active' : '')}
+              title="開発用: メイン領域を表示"
+              onClick={() => setDevOverlay((v) => !v)}
+            >
+              <FlaskConical size={18} />
+            </button>
+          )}
+        </div>
         <div className="topbar-right">
           <span className="who">{username}</span>
           <button className={'icon-btn' + (showSettings ? ' active' : '')} title="設定" onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
@@ -828,6 +850,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
       <div className="body" ref={bodyRef}>
         <aside className="list" style={{ width: sidebarWidth }}>
+          <div className={'list-events' + (eventsCollapsed ? ' collapsed' : '')}>
+          {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">イベントリストエリア</span></div>}
           <div className="list-head">
             <button className="list-collapse" title={eventsCollapsed ? '展開する' : '畳む'} onClick={() => setEventsCollapsed((v) => !v)}>
               {eventsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
@@ -846,8 +870,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               return (
                 <li
                   key={e.id}
-                  className={e.id === selectedId ? 'tl-item selected' : 'tl-item'}
-                  onClick={() => selectEvent(e)}
+                  className={e.id === chartSelectedId ? 'tl-item selected' : 'tl-item'}
+                  onClick={() => setChartSelectedId(e.id)}
+                  onDoubleClick={() => selectEvent(e)}
                 >
                   <div className="tl-dot" style={dotColor ? { borderColor: dotColor } : undefined} />
                   <div className="tl-content">
@@ -859,8 +884,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             })}
           </ul>
           </>)}
+          </div>
 
           <div className="tag-section">
+            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">タグリストエリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={tagsCollapsed ? '展開する' : '畳む'} onClick={() => setTagsCollapsed((v) => !v)}>
                 {tagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
@@ -951,6 +978,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 wheelShift={settings.wheelShift}
                 wheelCtrl={settings.wheelCtrl}
                 zoomFactor={settings.zoomFactor}
+                devOverlay={DEV_BUTTON && devOverlay}
                 tagColors={tagColors}
               />
             ) : (
