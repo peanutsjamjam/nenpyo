@@ -9,11 +9,12 @@ const DEV_BUTTON = true
 // ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
 type Theme = 'light' | 'dark'
 // マウスホイール（修飾キー別）に割り当てる動作
-type WheelAction = 'scroll' | 'pan' | 'zoom'
+type WheelAction = 'scroll' | 'pan' | 'zoom' | 'none'
 const WHEEL_ACTION_LABELS: Record<WheelAction, string> = {
   scroll: '上下スクロール',
   pan: '左右スクロール（パン）',
   zoom: '拡大縮小',
+  none: 'なし',
 }
 // 拡大縮小の倍率（1ノッチあたり）の選択肢
 const ZOOM_FACTORS = [1.05, 1.1, 1.2, 1.3, 1.5]
@@ -24,6 +25,7 @@ type AppSettings = {
   wheelShift: WheelAction
   wheelCtrl: WheelAction
   zoomFactor: number
+  moveClickedIntoView: boolean
 }
 const SETTINGS_KEY = 'nenpyo-settings'
 
@@ -35,6 +37,7 @@ function loadSettings(): AppSettings {
     wheelShift: 'pan',
     wheelCtrl: 'zoom',
     zoomFactor: 1.2,
+    moveClickedIntoView: false,
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
@@ -171,12 +174,24 @@ const MAX_YEARS = 40000               // 表示幅の上限
 const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サイズ（CSS と一致させる）
 const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS .chart-row と一致させる）
 
+// 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
+const unitWidth = (month: number | null, day: number | null) =>
+  day != null ? DAY : month != null ? MONTH : 1
+// バーの占有区間 [s, end)。終了は「その単位の終わり＝次の単位の頭」まで広げる。
+function eventSpan(e: EventItem): { s: number; end: number } {
+  const s = fracYear(e.start_year, e.start_month, e.start_day)
+  const end = e.end_year == null
+    ? s + unitWidth(e.start_month, e.start_day)
+    : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_month, e.end_day)
+  return { s, end }
+}
+
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, devOverlay, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, devOverlay, centerRequest, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number) => void
@@ -191,6 +206,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   wheelCtrl: WheelAction
   zoomFactor: number
   devOverlay: boolean
+  centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -232,7 +248,8 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     const onWheel = (ev: WheelEvent) => {
       // 押されている修飾キーに割り当てられた動作を選ぶ（Ctrl 優先、次に Shift、無ければ修飾なし）
       const action = ev.ctrlKey ? wheelCtrl : ev.shiftKey ? wheelShift : wheelPlain
-      if (action === 'scroll') return // ブラウザ既定のスクロールに任せる
+      // pan / zoom 以外（上下スクロール・なし）はアプリ側で何もせず、ブラウザ既定に任せる
+      if (action !== 'pan' && action !== 'zoom') return
       ev.preventDefault()
       // Shift 押下時はブラウザが deltaY を deltaX に変換することがあるため、大きい方を使う
       const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
@@ -262,6 +279,19 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor])
+
+  // イベントリストからの「中央へ移動」リクエスト。横はイベント期間の中央を centerYear に、
+  // 縦はその行を表示域の中央へスクロール（ズームは変えない）。バークリックでは発生しない。
+  useEffect(() => {
+    if (!centerRequest) return
+    const idx = events.findIndex((ev) => ev.id === centerRequest.id)
+    if (idx < 0) return
+    const { s, end } = eventSpan(events[idx])
+    setCenterYear(() => (s + end) / 2)
+    const el = scrollRef.current
+    if (el) el.scrollTop = Math.max(0, idx * ROW_PX + ROW_PX / 2 - el.clientHeight / 2)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerRequest])
 
   const rangeStart = centerYear - yearsVisible / 2
   const rangeEnd = centerYear + yearsVisible / 2
@@ -296,19 +326,6 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     }
     // 座標0（AD1の頭＝1BC/AD1の境目）を強調
     gridLines.push({ left: pct(y), major: k === 0, label })
-  }
-
-  // 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
-  const unitWidth = (month: number | null, day: number | null) =>
-    day != null ? DAY : month != null ? MONTH : 1
-  // バーの占有区間 [s, end)。終了は「その単位の終わり＝次の単位の頭」まで広げる。
-  // 単発（終了なし）は開始の単位1つ分の幅にする（例: 1日のイベントは縦線〜次の縦線）。
-  const eventSpan = (e: EventItem) => {
-    const s = fracYear(e.start_year, e.start_month, e.start_day)
-    const end = e.end_year == null
-      ? s + unitWidth(e.start_month, e.start_day)
-      : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_month, e.end_day)
-    return { s, end }
   }
 
   // 下部の水平スクロールバー: 全イベントの範囲内を左右にパンする。
@@ -478,6 +495,8 @@ function SettingsPanel({ settings, setSettings, onClose }: {
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
 }) {
+  // どの修飾キーにも「拡大縮小」が割り当てられていなければ、倍率・反転は無効化
+  const zoomUsed = settings.wheelPlain === 'zoom' || settings.wheelShift === 'zoom' || settings.wheelCtrl === 'zoom'
   return (
     <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
       <div className="settings-head">
@@ -487,6 +506,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 
       <section className="settings-section">
         <h3 className="settings-label">テーマ</h3>
+        <div className="settings-section-body">
         <div className="theme-options">
           {(['light', 'dark'] as Theme[]).map((t) => (
             <button
@@ -498,10 +518,12 @@ function SettingsPanel({ settings, setSettings, onClose }: {
             </button>
           ))}
         </div>
+        </div>
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">マウスホイールの操作</h3>
+        <h3 className="settings-label">マウスホイール</h3>
+        <div className="settings-section-body">
         {([
           ['wheelPlain', 'マウスホイール'],
           ['wheelShift', 'Shift＋マウスホイール'],
@@ -520,10 +542,11 @@ function SettingsPanel({ settings, setSettings, onClose }: {
             </select>
           </div>
         ))}
-        <div className="wheel-row">
+        <div className={'wheel-row' + (zoomUsed ? '' : ' disabled')}>
           <span className="wheel-row-label">拡大縮小の倍率</span>
           <select
             className="wheel-select"
+            disabled={!zoomUsed}
             value={settings.zoomFactor}
             onChange={(e) => setSettings((s) => ({ ...s, zoomFactor: Number(e.target.value) }))}
           >
@@ -532,17 +555,33 @@ function SettingsPanel({ settings, setSettings, onClose }: {
             ))}
           </select>
         </div>
-        <label className="settings-toggle">
+        <label className={'settings-toggle' + (zoomUsed ? '' : ' disabled')}>
+          <span>拡大・縮小の向きを逆にする</span>
           <input
             type="checkbox"
+            disabled={!zoomUsed}
             checked={settings.invertZoom}
             onChange={(e) => setSettings((s) => ({ ...s, invertZoom: e.target.checked }))}
           />
-          <span>拡大・縮小の向きを逆にする</span>
         </label>
         <p className="settings-note">
           ホイールを手前に回すと拡大します（チェックで反転）。
         </p>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">イベントリスト</h3>
+        <div className="settings-section-body">
+          <label className="settings-toggle">
+            <span>クリックしたイベントを画面内に移動させる</span>
+            <input
+              type="checkbox"
+              checked={settings.moveClickedIntoView}
+              onChange={(e) => setSettings((s) => ({ ...s, moveClickedIntoView: e.target.checked }))}
+            />
+          </label>
+        </div>
       </section>
 
       <p className="settings-note">テーマ・操作の設定はこのブラウザに保存されます。</p>
@@ -579,6 +618,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [tagsCollapsed, setTagsCollapsed] = useState(false)
   // 開発用: メイン領域を可視化するオーバーレイ
   const [devOverlay, setDevOverlay] = useState(false)
+  // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
+  const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
@@ -679,7 +720,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setIsNew(true)
     setConfirmDelete(false)
     setFormTagIds([])
-    resetForm(String(new Date().getFullYear()))
+    resetForm()
   }
 
   // 入力・編集画面を閉じて年表チャートへ戻る
@@ -871,7 +912,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 <li
                   key={e.id}
                   className={e.id === chartSelectedId ? 'tl-item selected' : 'tl-item'}
-                  onClick={() => setChartSelectedId(e.id)}
+                  onClick={() => {
+                    setChartSelectedId(e.id)
+                    if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
+                  }}
                   onDoubleClick={() => selectEvent(e)}
                 >
                   <div className="tl-dot" style={dotColor ? { borderColor: dotColor } : undefined} />
@@ -979,6 +1023,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 wheelCtrl={settings.wheelCtrl}
                 zoomFactor={settings.zoomFactor}
                 devOverlay={DEV_BUTTON && devOverlay}
+                centerRequest={centerReq}
                 tagColors={tagColors}
               />
             ) : (
@@ -992,22 +1037,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             <div className="panel-overlay">
             <div className="form">
               <div className="form-head">
-                <h2 className="form-title">{isNew ? '出来事を追加' : '出来事を編集'}</h2>
+                <h2 className="form-title">{isNew ? 'イベントの追加' : 'イベントの編集'}</h2>
                 <button className="settings-close" onClick={closeEditor}>閉じる</button>
               </div>
-              <div className="range-row">
-                <label className="fld">開始
-                  <input value={startText} placeholder="例: 1853 または 1853/7/8"
+              <div className="fld">期間
+                <div className="range-row">
+                  <input value={startText} placeholder="yyyy/mm/dd"
                     onChange={(e) => setStartText(e.target.value)} />
-                </label>
-                <span className="range-sep">〜</span>
-                <label className="fld">終了
-                  <input value={endText} placeholder="例: 1854/3/31（空欄可）"
+                  <span className="range-sep">〜</span>
+                  <input value={endText} placeholder="yyyy/mm/dd"
                     onChange={(e) => setEndText(e.target.value)} />
-                </label>
-              </div>
-              <div className="hint range-hint">
-                年のみ「1853」／年月日「1853/7/8」（区切りは「/」のみ）。紀元前は先頭に「-」（例: -660）。終了は空欄なら単発の出来事。
+                </div>
               </div>
 
               <label className="fld">タイトル
