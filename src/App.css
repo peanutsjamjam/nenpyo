@@ -191,7 +191,7 @@
 .auth-submit:disabled { opacity: 0.6; }
 
 /* ---- 削除確認モーダル ---- */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: grid; place-items: center; z-index: 10; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: grid; place-items: center; z-index: 50; }
 .modal { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 320px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
 .modal p { margin: 0 0 18px; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
