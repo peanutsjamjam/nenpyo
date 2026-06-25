@@ -9,6 +9,7 @@
   --accent-soft: #f0e3d4;
   --danger: #c0473b;
   --scrollbar-thumb: #c1c1c1;   /* ネイティブの縦スクロールバーに近いグレー */
+  --input-bg: #ffffff;          /* 入力欄・操作コントロールの背景 */
 
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
@@ -28,6 +29,7 @@
     --accent-soft: #3a3026;
     --danger: #e0796d;
     --scrollbar-thumb: #6b6b6b;
+    --input-bg: #3c362e;  /* 背景より明るくして入力欄を見分けやすく */
   }
 }
 
@@ -42,6 +44,7 @@
   --accent-soft: #3a3026;
   --danger: #e0796d;
   --scrollbar-thumb: #6b6b6b;
+  --input-bg: #3c362e;
 }
 
 * { box-sizing: border-box; }
@@ -56,7 +59,7 @@ input, textarea {
   font-family: inherit;
   font-size: 15px;
   color: var(--text);
-  background: var(--panel);
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;

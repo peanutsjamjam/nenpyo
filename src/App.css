@@ -47,9 +47,19 @@
   position: relative; z-index: 1; flex-shrink: 0; width: 16px; height: 16px; margin-top: 3px;
   border-radius: 50%; background: var(--panel); border: 3px solid var(--accent);
 }
-.tl-content { min-width: 0; }
+.tl-content { flex: 1; min-width: 0; }
 .tl-date { font-size: 13px; color: var(--accent); font-weight: 700; }
 .tl-title { font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ホバー時だけ表示される編集（鉛筆）ボタン */
+.tl-edit {
+  flex-shrink: 0; align-self: center;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+  cursor: pointer; opacity: 0;
+}
+.tl-item:hover .tl-edit { opacity: 1; }
+.tl-edit:hover { color: var(--text); border-color: var(--accent); }
 
 /* ---- エディタ ---- */
 .editor { flex: 1; min-width: 0; display: flex; padding: 24px; overflow-y: auto; position: relative; }
@@ -233,7 +243,7 @@
 .theme-options { display: flex; gap: 10px; }
 .theme-option {
   flex: 1; padding: 10px 16px; font-size: 14px; color: var(--text);
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
 }
 .theme-option:hover { border-color: var(--accent); }
 .theme-option.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
@@ -247,7 +257,7 @@
 .wheel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .wheel-row-label { font-size: 14px; color: var(--text); }
 .wheel-select {
-  font-family: inherit; font-size: 14px; color: var(--text); background: var(--panel);
+  font-family: inherit; font-size: 14px; color: var(--text); background: var(--input-bg);
   border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; cursor: pointer; min-width: 200px;
 }
 .wheel-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }

@@ -202,7 +202,7 @@ function eventSpan(e: EventItem): { s: number; end: number } {
 function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, devOverlay, centerRequest, tagColors }: {
   events: EventItem[]
   selectedId: number | null
-  onSelect: (id: number) => void
+  onSelect: (id: number | null) => void
   onEdit: (e: EventItem) => void
   centerYear: number
   setCenterYear: (updater: (v: number) => number) => void
@@ -431,6 +431,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         ref={scrollRef}
         onMouseMove={(e) => setHoverDate(dateAtX(e.clientX))}
         onMouseLeave={() => setHoverDate(null)}
+        onClick={() => onSelect(null)}
       >
         {/* 下端に「ビューポート高さ − 1行」の余白を足し、最下段のバーも画面最上部まで上げられるようにする */}
         <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - ROW_PX) }}>
@@ -479,14 +480,14 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
                       className="chart-bar"
                       style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }}
                       title={tip}
-                      onClick={() => onSelect(e.id)}
+                      onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
                     />
                   )}
                   <span
                     className="chart-bar-label"
                     style={{ left: `${labelLeft}%` }}
                     title={tip}
-                    onClick={() => onSelect(e.id)}
+                    onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
                     onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
                   >{labelText}</span>
                 </div>
@@ -956,6 +957,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     <div className="tl-date">{formatRangeAD(e)}</div>
                     <div className="tl-title">{e.title || '（無題）'}</div>
                   </div>
+                  <button className="tl-edit" title="編集" onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}>
+                    <Pencil size={15} />
+                  </button>
                 </li>
               )
             })}
