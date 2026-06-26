@@ -62,7 +62,7 @@
 .tl-edit:hover { color: var(--text); border-color: var(--accent); }
 
 /* ---- エディタ ---- */
-.editor { flex: 1; min-width: 0; display: flex; padding: 24px; overflow-y: auto; position: relative; }
+.editor { flex: 1; min-width: 0; display: flex; padding: 24px 20px; overflow-y: auto; position: relative; }
 
 /* 開発用: 各領域を囲む透明な四角＋ラベル（操作は透過する） */
 .dev-box {
@@ -92,7 +92,7 @@
 }
 /* 期間バー＋水平スクロールバーをまとめる中段。開発用の枠の基準にもなる。 */
 .chart-mid { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.chart-axis { position: relative; flex: 1; height: 34px; }
+.chart-axis { position: relative; flex: 1; height: 34px; overflow: hidden; }
 /* 縦線の直上に主ラベル（年/月/日）、その上の行に年。左端を縦線に合わせる（少し右に開始）。 */
 .axis-tick {
   position: absolute; bottom: 0; padding-left: 3px;
@@ -161,6 +161,7 @@
   border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 4px;
 }
 .form-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); }
+.form-head-actions { display: flex; align-items: center; gap: 8px; }
 .date-block { display: flex; flex-direction: column; gap: 6px; }
 .date-label { font-size: 13px; font-weight: 700; color: var(--text); }
 .date-row { display: flex; gap: 12px; }
@@ -291,6 +292,9 @@
 .tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
 .tag-list { list-style: none; margin: 0; padding: 0; }
 .tag-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+/* 編集（鉛筆）アイコンは項目に hover するまで隠す（イベントリストと同様） */
+.tag-item .tag-icon-btn { opacity: 0; }
+.tag-item:hover .tag-icon-btn { opacity: 1; }
 .tag-swatch { flex-shrink: 0; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); }
 /* 色を持たない（prime でない）タグの見本: 中身なしの四角 */
 .tag-swatch.none { background: transparent; border: 1px dashed var(--muted); }

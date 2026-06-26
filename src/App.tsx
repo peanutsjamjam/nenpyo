@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, Save, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, Check, X, Pencil, FlaskConical } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
 
@@ -371,8 +371,23 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   const panRange = total - yearsVisible                                   // 動ける幅(年)
   const thumbF = panRange > 0 ? clamp((rangeStart - contentMin) / panRange, 0, 1) : 0
   const thumbLeft = thumbF * (100 - thumbW)
+  // トラック（つまみ以外＝白くない部分）クリックで、その方向へ1ページ分まとめてスクロール。
+  const pageHPan = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    if (panRange <= 0) return
+    const track = hbarRef.current?.getBoundingClientRect()
+    if (!track || track.width <= 0) return
+    const clickF = (e.clientX - track.left) / track.width // トラック内 0..1
+    const thumbStart = thumbLeft / 100
+    const thumbEnd = (thumbLeft + thumbW) / 100
+    const dir = clickF < thumbStart ? -1 : clickF > thumbEnd ? 1 : 0
+    if (!dir) return
+    const c = clamp(centerYear + dir * yearsVisible, contentMin + yearsVisible / 2, contentMax - yearsVisible / 2)
+    setCenterYear(() => c)
+  }
   const startHPan = (e: ReactMouseEvent) => {
     e.preventDefault()
+    e.stopPropagation() // つまみのドラッグとトラックのページ送りを二重発火させない
     const track = hbarRef.current?.getBoundingClientRect()
     if (!track || panRange <= 0) return
     const usablePx = track.width * (1 - thumbW / 100)
@@ -498,7 +513,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       </div>
 
       {hasContent && (
-        <div className="chart-hbar" ref={hbarRef} title="ドラッグで左右に移動">
+        <div className="chart-hbar" ref={hbarRef} title="ドラッグ／クリックで左右に移動" onMouseDown={pageHPan}>
           <div className="chart-hthumb" style={{ left: `${thumbLeft}%`, width: `${thumbW}%` }} onMouseDown={startHPan} />
         </div>
       )}
@@ -642,7 +657,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // タグ一覧と、編集中イベントに付けるタグID
   const [tags, setTags] = useState<Tag[]>([])
   const [formTagIds, setFormTagIds] = useState<number[]>([])
-  const [addingTag, setAddingTag] = useState(false)
+  const [addingTag, setAddingTag] = useState(false) // 「タグの追加」モーダルを開いているか
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState<string | null>(null) // null=色なし(prime=false)
   const [editingTagId, setEditingTagId] = useState<number | null>(null)
@@ -650,6 +665,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 左サイドバーの一覧の畳み状態
   const [eventsCollapsed, setEventsCollapsed] = useState(false)
   const [tagsCollapsed, setTagsCollapsed] = useState(false)
+  const [primeTagsCollapsed, setPrimeTagsCollapsed] = useState(false)
   // 開発用: メイン領域を可視化するオーバーレイ
   const [devOverlay, setDevOverlay] = useState(false)
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
@@ -696,8 +712,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // prime はユーザーが決めた並び順（sort_order）、普通タグはタグ名順（バックエンドの並び）。
   const primeTagList = tags.filter((t) => t.prime).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
   const normalTagList = tags.filter((t) => !t.prime)
-  // タグ一覧の並び: prime を先に、その後に普通タグ。
-  const orderedTags = [...primeTagList, ...normalTagList]
 
   // イベントが持つ prime タグの id（最大1つ）。無ければ undefined。
   const primeIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
@@ -735,7 +749,79 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   useEffect(() => { reload(); reloadTags() }, [reload, reloadTags])
 
+  // ---- 自動保存 ------------------------------------------------------------
+  // テキスト欄はフォーカスが外れたとき、タグはクリックされたときに 0.5 秒後を予約し、
+  // その時点のフォーム内容で作成/更新する。予約が重なれば最後のものだけ走る（デバウンス）。
+  const saveTimer = useRef<number | null>(null)
+  const savingRef = useRef(false)
+  const autoSaveRef = useRef<() => void>(() => {})
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimer.current != null) clearTimeout(saveTimer.current)
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null
+      autoSaveRef.current()
+    }, 500)
+  }, [])
+
+  const autoSave = useCallback(async () => {
+    let input: EventInput
+    try {
+      const start = parseDateText(startText)
+      const end = parseDateText(endText)
+      if (start.year == null) {
+        // 開始年が無いと保存できない。新規で未入力ならそっと無視、入力途中ならエラー表示。
+        if (startText.trim() !== '') setError('開始の年は必須です')
+        return
+      }
+      setError('')
+      input = {
+        start_year: start.year, start_month: start.month, start_day: start.day,
+        end_year: end.year, end_month: end.month, end_day: end.day,
+        title, detail, tag_ids: formTagIds,
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    if (savingRef.current) { scheduleSave(); return } // 進行中なら完了後にやり直す
+    savingRef.current = true
+    try {
+      if (isNew) {
+        const created = await api.createEvent(input)
+        // 以後は更新扱いに。入力途中のテキストは保持したいので resetForm はしない。
+        setSelectedId(created.id)
+        setIsNew(false)
+        setFormTagIds(created.tag_ids)
+        await reload()
+      } else if (selectedId != null) {
+        await api.updateEvent(selectedId, input)
+        await reload()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      savingRef.current = false
+    }
+  }, [startText, endText, title, detail, formTagIds, isNew, selectedId, reload, scheduleSave])
+
+  useEffect(() => { autoSaveRef.current = autoSave }, [autoSave])
+
+  // 別イベントへ切り替える/閉じる前に、予約済みの保存があれば即実行して取りこぼしを防ぐ。
+  const flushSave = () => {
+    if (saveTimer.current != null) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      autoSaveRef.current()
+    }
+  }
+  // 予約済みの保存を破棄する（削除時など、保存させたくないとき）。
+  const cancelSave = () => {
+    if (saveTimer.current != null) { clearTimeout(saveTimer.current); saveTimer.current = null }
+  }
+
   const selectEvent = (e: EventItem) => {
+    flushSave()
     setShowSettings(false)
     setSelectedId(e.id)
     setIsNew(false)
@@ -749,6 +835,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const startNew = () => {
+    flushSave()
     setShowSettings(false)
     setSelectedId(null)
     setIsNew(true)
@@ -759,6 +846,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   // 入力・編集画面を閉じて年表チャートへ戻る
   const closeEditor = () => {
+    flushSave()
     setSelectedId(null)
     setIsNew(false)
     setConfirmDelete(false)
@@ -779,19 +867,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       const withoutPrime = ids.filter((x) => !primeIds.has(x))
       return ids.includes(id) ? withoutPrime : [...withoutPrime, id]
     })
-  }
-
-  const addTag = async () => {
-    const name = newTagName.trim()
-    if (name === '') { setAddingTag(false); setNewTagName(''); setNewTagColor(null); return }
-    try {
-      // 色を選んでいれば prime=true のタグ、選んでいなければ色なし(prime=false)で作成
-      await api.createTag(newTagColor ? { name, color: newTagColor, prime: true } : { name })
-      setNewTagName(''); setNewTagColor(null); setAddingTag(false)
-      await reloadTags()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
   }
 
   // タグ名編集中に色見本をクリックして色を選んだとき: prime=true にして色を設定（即時保存）
@@ -819,6 +894,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const deleteTag = async (id: number) => {
+    if (tagSaveTimer.current != null) { clearTimeout(tagSaveTimer.current); tagSaveTimer.current = null }
     try {
       await api.deleteTag(id)
       setFormTagIds((ids) => ids.filter((x) => x !== id))
@@ -836,51 +912,82 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setEditTagName(t.name)
   }
 
-  const saveTagName = async (t: Tag) => {
+  // タグの追加/編集モーダルのタグ名: フォーカスが外れた 0.5 秒後にその内容で保存する（デバウンス）。
+  const tagSaveTimer = useRef<number | null>(null)
+  const tagAutoSaveRef = useRef<() => void>(() => {})
+
+  const scheduleTagSave = useCallback(() => {
+    if (tagSaveTimer.current != null) clearTimeout(tagSaveTimer.current)
+    tagSaveTimer.current = window.setTimeout(() => {
+      tagSaveTimer.current = null
+      tagAutoSaveRef.current()
+    }, 500)
+  }, [])
+
+  const autoSaveTag = useCallback(async () => {
+    if (addingTag) {
+      // 追加モード: 名前があれば作成し、以後はそのタグの編集として扱う（イベント追加と同じ流れ）。
+      const name = newTagName.trim()
+      if (name === '') return
+      try {
+        const created = await api.createTag(newTagColor ? { name, color: newTagColor, prime: true } : { name })
+        await reloadTags()
+        setAddingTag(false)
+        setEditingTagId(created.id)
+        setEditTagName(created.name)
+        setNewTagName(''); setNewTagColor(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+      return
+    }
+    if (editingTagId == null) return
+    const t = tags.find((x) => x.id === editingTagId)
+    if (!t) return
     const name = editTagName.trim()
-    if (name === '' || name === t.name) { setEditingTagId(null); return }
+    if (name === '' || name === t.name) return // 空・変更なしは何もしない
     try {
       // 名前のみ変更。色は現状を維持して送る（prime はサーバー側で保持される）
       await api.updateTag(t.id, { name, color: t.color })
-      setEditingTagId(null)
       await reloadTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
+  }, [addingTag, newTagName, newTagColor, editingTagId, editTagName, tags, reloadTags])
+
+  useEffect(() => { tagAutoSaveRef.current = autoSaveTag }, [autoSaveTag])
+
+  // タグの追加/編集モーダルを閉じる。
+  const closeTagEditor = () => {
+    const pending = tagSaveTimer.current != null
+    if (pending) { clearTimeout(tagSaveTimer.current!); tagSaveTimer.current = null }
+    if (addingTag) {
+      // 追加中に閉じる: 名前があれば作成だけして終わる（編集モードへは移行しない）。
+      const name = newTagName.trim()
+      if (name !== '') {
+        const color = newTagColor
+        api.createTag(color ? { name, color, prime: true } : { name })
+          .then(() => reloadTags())
+          .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      }
+    } else if (pending) {
+      tagAutoSaveRef.current() // 編集中の保留保存を取りこぼさない
+    }
+    setAddingTag(false)
+    setEditingTagId(null)
+    setNewTagName(''); setNewTagColor(null)
   }
 
-  const save = async () => {
-    setError('')
-    let input: EventInput
-    try {
-      const start = parseDateText(startText)
-      const end = parseDateText(endText)
-      if (start.year == null) throw new Error('開始の年は必須です')
-      input = {
-        start_year: start.year, start_month: start.month, start_day: start.day,
-        end_year: end.year, end_month: end.month, end_day: end.day,
-        title, detail, tag_ids: formTagIds,
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      return
-    }
-    try {
-      if (isNew) {
-        const created = await api.createEvent(input)
-        await reload()
-        selectEvent(created)
-      } else if (selectedId != null) {
-        const updated = await api.updateEvent(selectedId, input)
-        await reload()
-        selectEvent(updated)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
+  // Prime/タグ いずれかの「＋」から、タグ追加モーダルを開く。
+  const startAddTag = (prime: boolean) => {
+    setEditingTagId(null)
+    setNewTagName('')
+    setNewTagColor(prime ? '#9a6b3f' : null) // 色ありで作成すると prime タグになる
+    setAddingTag(true)
   }
 
   const doDelete = async () => {
+    cancelSave() // 削除するので予約済みの保存は捨てる
     if (selectedId == null) return
     try {
       await api.deleteEvent(selectedId)
@@ -968,73 +1075,50 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           </div>
 
           <div className="tag-section">
-            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">タグリストエリア</span></div>}
+            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">Primeタグエリア</span></div>}
+            <div className="list-head">
+              <button className="list-collapse" title={primeTagsCollapsed ? '展開する' : '畳む'} onClick={() => setPrimeTagsCollapsed((v) => !v)}>
+                {primeTagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span className="list-head-title">Primeタグ</span>
+              </button>
+              <button className="list-add-btn" title="Primeタグを追加" onClick={() => { setPrimeTagsCollapsed(false); startAddTag(true) }}>
+                <Plus size={15} />
+              </button>
+            </div>
+            {!primeTagsCollapsed && (<>
+            {primeTagList.length === 0 && <p className="tag-empty">「＋」でPrimeタグを作成できます。</p>}
+            <ul className="tag-list">
+              {primeTagList.map((t) => (
+                  <li key={t.id} className="tag-item">
+                    <span className="tag-swatch" style={{ background: t.color }} />
+                    <span className="tag-name">{t.name}</span>
+                    <button className="tag-icon-btn" title="タグを編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                  </li>
+              ))}
+            </ul>
+            </>)}
+          </div>
+
+          <div className="tag-section">
+            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">タグエリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={tagsCollapsed ? '展開する' : '畳む'} onClick={() => setTagsCollapsed((v) => !v)}>
                 {tagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 <span className="list-head-title">タグ</span>
               </button>
-              <button className="list-add-btn" title="タグを追加" onClick={() => { setTagsCollapsed(false); setAddingTag(true); setNewTagName(''); setNewTagColor(null) }}>
+              <button className="list-add-btn" title="タグを追加" onClick={() => { setTagsCollapsed(false); startAddTag(false) }}>
                 <Plus size={15} />
               </button>
             </div>
             {!tagsCollapsed && (<>
-            {addingTag && (
-              <div className="tag-add-row">
-                <label
-                  className={(newTagColor ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
-                  style={newTagColor ? { background: newTagColor } : undefined}
-                  title="クリックで色を選ぶ（プライムタグにする）"
-                >
-                  <input type="color" value={newTagColor ?? '#9a6b3f'} onChange={(ev) => setNewTagColor(ev.target.value)} />
-                </label>
-                <input
-                  autoFocus
-                  value={newTagName}
-                  placeholder="タグ名"
-                  onChange={(ev) => setNewTagName(ev.target.value)}
-                  onKeyDown={(ev) => { if (ev.key === 'Enter') addTag(); if (ev.key === 'Escape') { setAddingTag(false); setNewTagName(''); setNewTagColor(null) } }}
-                />
-                <button className="tag-icon-btn" title="追加" onClick={addTag}><Check size={15} /></button>
-                <button className="tag-icon-btn" title="やめる" onClick={() => { setAddingTag(false); setNewTagName('') }}><X size={15} /></button>
-              </div>
-            )}
-            {tags.length === 0 && !addingTag && <p className="tag-empty">「＋」でタグを作成できます。</p>}
+            {normalTagList.length === 0 && <p className="tag-empty">「＋」でタグを作成できます。</p>}
             <ul className="tag-list">
-              {orderedTags.map((t) => (
-                editingTagId === t.id ? (
-                  <li key={t.id} className="tag-add-row">
-                    <label
-                      className={(t.prime ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
-                      style={t.prime ? { background: t.color } : undefined}
-                      title="クリックで色を選ぶ（プライムタグにする）"
-                    >
-                      <input type="color" value={t.prime ? t.color : '#9a6b3f'} onChange={(ev) => pickTagColor(t, ev.target.value)} />
-                    </label>
-                    <input
-                      autoFocus
-                      value={editTagName}
-                      placeholder="タグ名"
-                      onChange={(ev) => setEditTagName(ev.target.value)}
-                      onKeyDown={(ev) => { if (ev.key === 'Enter') saveTagName(t); if (ev.key === 'Escape') setEditingTagId(null) }}
-                    />
-                    <button className="tag-icon-btn" title="保存" onClick={() => saveTagName(t)}><Check size={15} /></button>
-                    <button className="tag-icon-btn" title="削除する" onClick={() => deleteTag(t.id)}><Trash2 size={15} /></button>
-                  </li>
-                ) : (
+              {normalTagList.map((t) => (
                   <li key={t.id} className="tag-item">
-                    <span className={t.prime ? 'tag-swatch' : 'tag-swatch none'} style={t.prime ? { background: t.color } : undefined} />
+                    <span className="tag-swatch none" />
                     <span className="tag-name">{t.name}</span>
-                    {t.prime && (() => {
-                      const pi = primeTagList.findIndex((p) => p.id === t.id)
-                      return (<>
-                        <button className="tag-icon-btn" title="上へ" disabled={pi <= 0} onClick={() => movePrimeTag(t.id, -1)}><ChevronUp size={15} /></button>
-                        <button className="tag-icon-btn" title="下へ" disabled={pi >= primeTagList.length - 1} onClick={() => movePrimeTag(t.id, 1)}><ChevronDown size={15} /></button>
-                      </>)
-                    })()}
-                    <button className="tag-icon-btn" title="タグ名を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                    <button className="tag-icon-btn" title="タグを編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
                   </li>
-                )
               ))}
             </ul>
             </>)}
@@ -1075,27 +1159,32 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             <div className="form">
               <div className="form-head">
                 <h2 className="form-title">{isNew ? 'イベントの追加' : 'イベントの編集'}</h2>
-                <button className="settings-close" onClick={closeEditor}>閉じる</button>
+                <div className="form-head-actions">
+                  {!isNew && (
+                    <button className="settings-close" onClick={() => setConfirmDelete(true)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
+                  )}
+                  <button className="settings-close" onClick={closeEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
+                </div>
               </div>
               <div className="fld">期間
                 <div className="range-row">
                   <input value={startText} placeholder="yyyy/mm/dd"
-                    onChange={(e) => setStartText(e.target.value)} />
+                    onChange={(e) => setStartText(e.target.value)} onBlur={scheduleSave} />
                   <span className="range-sep">〜</span>
                   <input value={endText} placeholder="yyyy/mm/dd"
-                    onChange={(e) => setEndText(e.target.value)} />
+                    onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
                 </div>
               </div>
 
               <label className="fld">タイトル
-                <input value={title} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} />
+                <input value={title} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
               </label>
 
               <label className="fld grow">詳細
-                <textarea value={detail} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} />
+                <textarea value={detail} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
               </label>
 
-              <div className="fld">プライムタグ<span className="hint">（1つだけ選べます）</span>
+              <div className="fld">プライムタグ
                 {primeTagList.length === 0 ? (
                   <p className="hint">プライムタグはありません。</p>
                 ) : (
@@ -1105,7 +1194,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         type="button"
                         key={t.id}
                         className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
-                        onClick={() => selectPrimeTag(t.id)}
+                        onClick={() => { selectPrimeTag(t.id); scheduleSave() }}
                       >
                         <span className="tag-swatch" style={{ background: t.color }} />
                         {t.name}
@@ -1115,7 +1204,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 )}
               </div>
 
-              <div className="fld">タグ<span className="hint">（いくつでも選べます）</span>
+              <div className="fld">タグ
                 {normalTagList.length === 0 ? (
                   <p className="hint">タグはありません。左の「タグ」欄から作成できます。</p>
                 ) : (
@@ -1125,7 +1214,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         type="button"
                         key={t.id}
                         className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
-                        onClick={() => toggleFormTag(t.id)}
+                        onClick={() => { toggleFormTag(t.id); scheduleSave() }}
                       >
                         <span className="tag-swatch none" />
                         {t.name}
@@ -1136,13 +1225,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               </div>
 
               {error && <div className="form-error">{error}</div>}
-
-              <div className="actions">
-                <button className="save-btn" onClick={save}><Save size={16} /> {isNew ? '追加' : '保存'}</button>
-                {!isNew && (
-                  <button className="del-btn" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> 削除</button>
-                )}
-              </div>
             </div>
             </div>
           )}
@@ -1156,6 +1238,62 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               />
             </div>
           )}
+
+          {(addingTag || editingTagId != null) && (() => {
+            // 追加(isAdd)と編集で同じUIを使う。追加中は下書き(newTag*)、編集中は対象タグ(t)を読む。
+            const t = editingTagId != null ? tags.find((x) => x.id === editingTagId) : null
+            if (editingTagId != null && !t) return null
+            const isAdd = t == null
+            const pi = t ? primeTagList.findIndex((p) => p.id === t.id) : -1
+            const swatchColor = isAdd ? newTagColor : (t!.prime ? t!.color : null)
+            const nameValue = isAdd ? newTagName : editTagName
+            const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(t!, color) }
+            const onNameChange = (v: string) => { isAdd ? setNewTagName(v) : setEditTagName(v) }
+            return (
+              <div className="panel-overlay">
+                <div className="form">
+                  <div className="form-head">
+                    <h2 className="form-title">{isAdd ? 'タグの追加' : 'タグの編集'}</h2>
+                    <div className="form-head-actions">
+                      {!isAdd && t!.prime && (<>
+                        <button className="settings-close" onClick={() => movePrimeTag(t!.id, -1)} disabled={pi <= 0} title="上へ" aria-label="上へ"><ChevronUp size={18} /></button>
+                        <button className="settings-close" onClick={() => movePrimeTag(t!.id, 1)} disabled={pi >= primeTagList.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
+                      </>)}
+                      {!isAdd && (
+                        <button className="settings-close" onClick={() => deleteTag(t!.id)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
+                      )}
+                      <button className="settings-close" onClick={closeTagEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
+                    </div>
+                  </div>
+
+                  <div className="fld">色
+                    <div>
+                      <label
+                        className={(swatchColor ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
+                        style={swatchColor ? { background: swatchColor } : undefined}
+                        title="クリックで色を選ぶ（プライムタグにする）"
+                      >
+                        <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <label className="fld">タグ名
+                    <input
+                      autoFocus
+                      value={nameValue}
+                      placeholder="タグ名"
+                      onChange={(ev) => onNameChange(ev.target.value)}
+                      onBlur={scheduleTagSave}
+                      onKeyDown={(ev) => { if (ev.key === 'Escape') closeTagEditor() }}
+                    />
+                  </label>
+
+                  {error && <div className="form-error">{error}</div>}
+                </div>
+              </div>
+            )
+          })()}
         </main>
       </div>
 
