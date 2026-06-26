@@ -19,32 +19,32 @@
 /* ダーク配色の共通定義。OS がダークかつ未設定の初回表示と、明示的なダーク選択時に適用 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #1c1a17;
-    --panel: #262320;
-    --panel-2: #211e1b;
-    --text: #ece7df;
-    --muted: #9a948a;
-    --border: #38332d;
-    --accent: #c79a6b;
-    --accent-soft: #3a3026;
-    --danger: #e0796d;
-    --scrollbar-thumb: #6b6b6b;
-    --input-bg: #3c362e;  /* 背景より明るくして入力欄を見分けやすく */
+    --bg: #15191f;
+    --panel: #1e242c;
+    --panel-2: #1a1f26;
+    --text: #e3e8ef;
+    --muted: #8b95a4;
+    --border: #2d343e;
+    --accent: #57a6dd;
+    --accent-soft: #233141;
+    --danger: #e0727a;
+    --scrollbar-thumb: #586272;
+    --input-bg: #2b323c;  /* 背景より明るくして入力欄を見分けやすく */
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #1c1a17;
-  --panel: #262320;
-  --panel-2: #211e1b;
-  --text: #ece7df;
-  --muted: #9a948a;
-  --border: #38332d;
-  --accent: #c79a6b;
-  --accent-soft: #3a3026;
-  --danger: #e0796d;
-  --scrollbar-thumb: #6b6b6b;
-  --input-bg: #3c362e;
+  --bg: #15191f;
+  --panel: #1e242c;
+  --panel-2: #1a1f26;
+  --text: #e3e8ef;
+  --muted: #8b95a4;
+  --border: #2d343e;
+  --accent: #57a6dd;
+  --accent-soft: #233141;
+  --danger: #e0727a;
+  --scrollbar-thumb: #586272;
+  --input-bg: #2b323c;
 }
 
 * { box-sizing: border-box; }

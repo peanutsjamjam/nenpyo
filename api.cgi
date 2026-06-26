@@ -208,7 +208,8 @@ sub clean_event {
     my $title  = defined $body->{title}  ? $body->{title}  : '';
     my $detail = defined $body->{detail} ? $body->{detail} : '';
     $title =~ s/\r//g; $title =~ s/\n/ /g;
-    $title  = substr($title, 0, 300);
+    fail('タイトルは100文字以内にしてください') if length($title) > 100;
+    fail('詳細は1000文字以内にしてください')   if length($detail) > 1000;
 
     return ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail);
 }
@@ -299,7 +300,7 @@ sub clean_tag {
     $name =~ s/^\s+|\s+$//g;
     $name =~ s/[\r\n]/ /g;
     fail('タグ名を入力してください') if $name eq '';
-    fail('タグ名は30文字以内にしてください') if length($name) > 30;
+    fail('タグ名は40文字以内にしてください') if length($name) > 40;
     my $color = defined $body->{color} && "$body->{color}" ne '' ? $body->{color} : '#9a6b3f';
     fail('色の形式が正しくありません（例: #aabbcc）') unless $color =~ /^#[0-9a-fA-F]{6}$/;
     my $prime = $body->{prime} ? 1 : 0;
@@ -334,6 +335,7 @@ eval {
         $username =~ s/^\s+|\s+$//g;
         fail('ユーザー名は1〜50文字で入力してください') if $username eq '' || length($username) > 50;
         fail('パスワードは4文字以上にしてください') if length($password) < 4;
+        fail('パスワードは128文字以内にしてください') if length($password) > 128;
 
         my $exists = $dbh->selectrow_array('SELECT 1 FROM users WHERE username = ?', undef, $username);
         fail('このユーザー名は既に使われています', '409 Conflict') if $exists;

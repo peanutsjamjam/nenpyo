@@ -281,16 +281,24 @@
 .list-add-btn:hover, .tag-icon-btn:not(:disabled):hover { color: var(--text); border-color: var(--accent); }
 .tag-icon-btn:disabled { opacity: 0.3; cursor: default; }
 
-/* 左サイドバー: イベント欄（見出し＋一覧）。一覧が伸びて下のタグ欄を押し下げる。 */
-.list-events { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.list-events.collapsed { flex: 0 0 auto; }  /* 畳んだときは内容ぶんだけ（タグ欄が上に詰まる） */
+/* 左サイドバー: 各エリア（イベント/Primeタグ/タグ）。高さは flex-grow 比で配分し、
+   中の一覧だけがスクロールする。畳むと見出しぶんだけの高さになる。 */
+.list-pane { position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.list-pane + .list-pane { padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* エリア間のドラッグ用ハンドル（高さ配分の変更） */
+.pane-resizer { flex: 0 0 9px; cursor: row-resize; position: relative; }
+.pane-resizer::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+  transform: translateY(-50%); background: var(--border); border-radius: 2px;
+}
+.pane-resizer:hover::after, .pane-resizer:active::after { background: var(--accent); }
 
 /* 左サイドバー: タグ欄 */
-.tag-section { position: relative; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .tag-add-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tag-add-row input { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px; }
 .tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
-.tag-list { list-style: none; margin: 0; padding: 0; }
+.tag-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; }
 .tag-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
 /* 編集（鉛筆）アイコンは項目に hover するまで隠す（イベントリストと同様） */
 .tag-item .tag-icon-btn { opacity: 0; }
@@ -302,6 +310,14 @@
 .tag-swatch-pick { position: relative; padding: 0; cursor: pointer; }
 .tag-swatch-pick input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; cursor: pointer; }
 .tag-name { flex: 1; min-width: 0; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* タグ編集画面の色選び: 背景色で現在色を示す、クリックしやすい大きめのボタン */
+.color-pick {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 40px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.2);
+  color: #fff; cursor: pointer;
+}
+.color-pick svg { filter: drop-shadow(0 0 1px rgba(0,0,0,0.55)); pointer-events: none; }
+.color-pick input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; cursor: pointer; }
 
 /* 編集フォーム: タグ選択チップ */
 .tag-picker { display: flex; flex-wrap: wrap; gap: 8px; }

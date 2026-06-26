@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, FlaskConical } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, formatYearAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from './api'
 import './App.css'
 
@@ -110,14 +110,14 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
         </div>
 
         <label>ユーザー名
-          <input ref={usernameRef} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
+          <input ref={usernameRef} value={username} maxLength={50} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
         </label>
         <label>パスワード
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+          <input type="password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
         </label>
         {mode === 'register' && (
           <label>パスワード（確認）
-            <input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
+            <input type="password" value={password2} maxLength={128} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
           </label>
         )}
 
@@ -686,6 +686,53 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     try { localStorage.setItem(SIDEBAR_KEY, String(Math.round(sidebarWidth))) } catch { /* 無視 */ }
   }, [sidebarWidth])
 
+  // 左サイドバー3エリア（イベント/Primeタグ/タグ）の高さ配分（flex-grow の比）。
+  // ドラッグで隣り合う2エリア間の比を付け替える。localStorage に保存。
+  const listRef = useRef<HTMLElement>(null)
+  const PANE_GROW_KEY = 'nenpyo-pane-grow'
+  type PaneKey = 'events' | 'prime' | 'normal'
+  const [paneGrow, setPaneGrow] = useState<Record<PaneKey, number>>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(PANE_GROW_KEY) || 'null')
+      if (v && ['events', 'prime', 'normal'].every((k) => typeof v[k] === 'number' && v[k] > 0)) return v
+    } catch { /* 無視 */ }
+    return { events: 3, prime: 2, normal: 3 }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(PANE_GROW_KEY, JSON.stringify(paneGrow)) } catch { /* 無視 */ }
+  }, [paneGrow])
+
+  const paneStyle = (key: PaneKey, collapsed: boolean) =>
+    collapsed ? { flex: '0 0 auto' as const } : { flex: `${paneGrow[key]} 1 0`, minHeight: 0 }
+
+  // a と b の境界をドラッグして、2エリア間で高さ（grow 比）を付け替える。
+  const startPaneResize = (a: PaneKey, b: PaneKey) => (e: ReactMouseEvent) => {
+    e.preventDefault()
+    const H = listRef.current?.clientHeight || 1
+    const startY = e.clientY
+    const start = paneGrow
+    const G = start.events + start.prime + start.normal
+    const onMove = (ev: MouseEvent) => {
+      const dG = ((ev.clientY - startY) / H) * G
+      let ga = start[a] + dG
+      let gb = start[b] - dG
+      const min = 0.25
+      if (ga < min) { gb -= min - ga; ga = min }
+      if (gb < min) { ga -= min - gb; gb = min }
+      setPaneGrow((p) => ({ ...p, [a]: ga, [b]: gb }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'row-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // 仕切りをドラッグして左欄の幅を変える
   const startResize = (e: ReactMouseEvent) => {
     e.preventDefault()
@@ -1034,8 +1081,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       </header>
 
       <div className="body" ref={bodyRef}>
-        <aside className="list" style={{ width: sidebarWidth }}>
-          <div className={'list-events' + (eventsCollapsed ? ' collapsed' : '')}>
+        <aside className="list" ref={listRef} style={{ width: sidebarWidth }}>
+          <div className="list-pane" style={paneStyle('events', eventsCollapsed)}>
           {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">イベントリストエリア</span></div>}
           <div className="list-head">
             <button className="list-collapse" title={eventsCollapsed ? '展開する' : '畳む'} onClick={() => setEventsCollapsed((v) => !v)}>
@@ -1077,7 +1124,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           </>)}
           </div>
 
-          <div className="tag-section">
+          {!eventsCollapsed && !primeTagsCollapsed && (
+            <div className="pane-resizer" onMouseDown={startPaneResize('events', 'prime')} title="ドラッグで高さを変更" />
+          )}
+
+          <div className="list-pane" style={paneStyle('prime', primeTagsCollapsed)}>
             {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">Primeタグエリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={primeTagsCollapsed ? '展開する' : '畳む'} onClick={() => setPrimeTagsCollapsed((v) => !v)}>
@@ -1102,7 +1153,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             </>)}
           </div>
 
-          <div className="tag-section">
+          {!primeTagsCollapsed && !tagsCollapsed && (
+            <div className="pane-resizer" onMouseDown={startPaneResize('prime', 'normal')} title="ドラッグで高さを変更" />
+          )}
+
+          <div className="list-pane" style={paneStyle('normal', tagsCollapsed)}>
             {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">タグエリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={tagsCollapsed ? '展開する' : '畳む'} onClick={() => setTagsCollapsed((v) => !v)}>
@@ -1180,11 +1235,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               </div>
 
               <label className="fld">タイトル
-                <input value={title} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
+                <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
               </label>
 
               <label className="fld grow">詳細
-                <textarea value={detail} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
+                <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
               </label>
 
               <div className="fld">プライムタグ
@@ -1248,6 +1303,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             if (editingTagId != null && !t) return null
             const isAdd = t == null
             const pi = t ? primeTagList.findIndex((p) => p.id === t.id) : -1
+            // 色セクションは prime のときだけ表示（ノーマル追加・ノーマル編集では出さない）。
+            // 追加時は prime の「＋」で newTagColor が入るので、それを prime 判定に使う。
+            const isPrime = isAdd ? newTagColor != null : t!.prime
             const swatchColor = isAdd ? newTagColor : (t!.prime ? t!.color : null)
             const nameValue = isAdd ? newTagName : editTagName
             const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(t!, color) }
@@ -1269,22 +1327,22 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     </div>
                   </div>
 
-                  <div className="fld">色
-                    <div>
-                      <label
-                        className={(swatchColor ? 'tag-swatch' : 'tag-swatch none') + ' tag-swatch-pick'}
-                        style={swatchColor ? { background: swatchColor } : undefined}
-                        title="クリックで色を選ぶ（プライムタグにする）"
-                      >
-                        <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
-                      </label>
+                  {isPrime && (
+                    <div className="fld">色
+                      <div>
+                        <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title="クリックで色を選ぶ">
+                          <Palette size={20} />
+                          <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
+                        </label>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <label className="fld">タグ名
                     <input
                       autoFocus
                       value={nameValue}
+                      maxLength={40}
                       placeholder="タグ名"
                       onChange={(ev) => onNameChange(ev.target.value)}
                       onBlur={scheduleTagSave}
