@@ -177,6 +177,9 @@
 .date-row .fld { flex: 1; }
 .fld .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
 .fld.grow { flex: 1; }
+/* 見出し行：ラベル左・文字数カウンタ右 */
+.fld-head { display: flex; align-items: baseline; }
+.char-count { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
 .fld.grow textarea { flex: 1; min-height: 200px; resize: vertical; line-height: 1.6; }
 
 .actions { display: flex; gap: 10px; }

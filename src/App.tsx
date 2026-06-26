@@ -348,10 +348,10 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         bottomLabel = `${month}月`
         if (month === 1) topLabel = gridYearLabel(year)
       } else {
-        // 1日刻み: どの線も「○日」を表示。1日の線の上に月（1月なら「年 1月」）を表示。
+        // 1日刻み: どの線も「○日」を表示。1日の線の上に「年 ○月」を表示（毎月、年も付ける）。
         const { year, month, day } = posToYMD(p)
         bottomLabel = `${day}日`
-        if (day === 1) topLabel = month === 1 ? `${gridYearLabel(year)} 1月` : `${month}月`
+        if (day === 1) topLabel = `${gridYearLabel(year)} ${month}月`
       }
       gridLines.push({ left: pct(p), major: k === 0, topLabel, bottomLabel })
     }
@@ -1234,11 +1234,13 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 </div>
               </div>
 
-              <label className="fld">タイトル
+              <label className="fld">
+                <span className="fld-head">タイトル<span className="char-count">({title.length}/100)</span></span>
                 <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
               </label>
 
-              <label className="fld grow">詳細
+              <label className="fld grow">
+                <span className="fld-head">詳細<span className="char-count">({detail.length}/1000)</span></span>
                 <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
               </label>
 
@@ -1338,7 +1340,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     </div>
                   )}
 
-                  <label className="fld">タグ名
+                  <label className="fld">
+                    <span className="fld-head">タグ名<span className="char-count">({nameValue.length}/40)</span></span>
                     <input
                       autoFocus
                       value={nameValue}
