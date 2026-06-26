@@ -654,6 +654,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [isNew, setIsNew] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmDeleteTagId, setConfirmDeleteTagId] = useState<number | null>(null)
   // タグ一覧と、編集中イベントに付けるタグID
   const [tags, setTags] = useState<Tag[]>([])
   const [formTagIds, setFormTagIds] = useState<number[]>([])
@@ -907,6 +908,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const startEditTag = (t: Tag) => {
+    setError('')
     setAddingTag(false)
     setEditingTagId(t.id)
     setEditTagName(t.name)
@@ -980,6 +982,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   // Prime/タグ いずれかの「＋」から、タグ追加モーダルを開く。
   const startAddTag = (prime: boolean) => {
+    setError('')
     setEditingTagId(null)
     setNewTagName('')
     setNewTagColor(prime ? '#9a6b3f' : null) // 色ありで作成すると prime タグになる
@@ -1260,7 +1263,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         <button className="settings-close" onClick={() => movePrimeTag(t!.id, 1)} disabled={pi >= primeTagList.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
                       </>)}
                       {!isAdd && (
-                        <button className="settings-close" onClick={() => deleteTag(t!.id)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
+                        <button className="settings-close" onClick={() => setConfirmDeleteTagId(t!.id)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
                       )}
                       <button className="settings-close" onClick={closeTagEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
                     </div>
@@ -1304,6 +1307,18 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             <div className="modal-actions">
               <button onClick={() => setConfirmDelete(false)}>キャンセル</button>
               <button className="danger" onClick={doDelete}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteTagId != null && (
+        <div className="modal-overlay" onClick={() => setConfirmDeleteTagId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p>このタグを削除しますか？</p>
+            <div className="modal-actions">
+              <button onClick={() => setConfirmDeleteTagId(null)}>キャンセル</button>
+              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>削除する</button>
             </div>
           </div>
         </div>
