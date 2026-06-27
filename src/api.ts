@@ -11,7 +11,7 @@ export type EventItem = {
   end_day: number | null
   title: string
   detail: string
-  tag_ids: number[]
+  nenpyo_id: number | null   // 属する年表（最大1つ）。未所属は null
   created: number
   updated: number
 }
@@ -25,7 +25,7 @@ export type EventInput = {
   end_day: number | null
   title: string
   detail: string
-  tag_ids: number[]
+  nenpyo_id: number | null
 }
 
 // 年表（旧 tag）。すべて色と並び順を持つ（prime の区別は廃止）。

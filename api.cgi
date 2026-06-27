@@ -21,7 +21,7 @@ use MIME::Base64 ();
 #   POST   ?action=logout                          -> ログアウト
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
-#   POST   ?action=event     {..., tag_ids:[..]}   -> 追加
+#   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
 #   PUT    ?action=event&id=<id>  {同上}           -> 更新
 #   DELETE ?action=event&id=<id>                   -> 削除
 #   GET    ?action=tags                            -> 自分の年表一覧（nenpyo）
@@ -228,7 +228,7 @@ sub clean_event {
     return ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail);
 }
 
-my $EVENT_COLS = "id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail,
+my $EVENT_COLS = "id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id,
                   extract(epoch FROM created_at)::bigint AS created,
                   extract(epoch FROM updated_at)::bigint AS updated";
 
@@ -243,54 +243,17 @@ sub event_row {
 # 数値か undef に整える小ヘルパ
 sub numornull { defined $_[0] ? 0 + $_[0] : undef }
 
-# ユーザーの全イベントについて event_id -> [tag_id...] のマップを作る。
-# 年表名昇順で並べるので、配列の先頭が「期間バーの色」に使われる年表になる。
-sub event_tag_map {
-    my ($dbh, $user_id) = @_;
-    my $rows = $dbh->selectall_arrayref(
-        'SELECT et.event_id, et.tag_id FROM event_tags et
-           JOIN nenpyo t ON t.id = et.tag_id
-          WHERE t.user_id = ?
-          ORDER BY t.name, t.id',
-        { Slice => {} }, $user_id
-    );
-    my %map;
-    push @{ $map{ $_->{event_id} } }, 0 + $_->{tag_id} for @$rows;
-    return \%map;
-}
-
-# 1イベント分の tag_id 配列（年表名昇順）
-sub event_tag_ids {
-    my ($dbh, $event_id) = @_;
-    my $rows = $dbh->selectcol_arrayref(
-        'SELECT et.tag_id FROM event_tags et
-           JOIN nenpyo t ON t.id = et.tag_id
-          WHERE et.event_id = ?
-          ORDER BY t.name, t.id',
-        undef, $event_id
-    );
-    return [ map { 0 + $_ } @$rows ];
-}
-
-# イベントのタグ結びつきを与えられた tag_ids で置き換える（所有チェック込み）。
-sub set_event_tags {
-    my ($dbh, $user_id, $event_id, $tag_ids) = @_;
-    $dbh->do('DELETE FROM event_tags WHERE event_id = ?', undef, $event_id);
-    return unless ref $tag_ids eq 'ARRAY' && @$tag_ids;
-    my $sth = $dbh->prepare(
-        'INSERT INTO event_tags (event_id, tag_id)
-         SELECT ?, id FROM nenpyo WHERE id = ? AND user_id = ?
-         ON CONFLICT DO NOTHING'
-    );
-    for my $tid (@$tag_ids) {
-        next unless defined $tid && "$tid" =~ /^\d+$/;
-        $sth->execute($event_id, 0 + $tid, $user_id);
-    }
+# 与えられた値が本人の年表 id なら数値で返す。そうでなければ undef（未所属）。
+sub owned_nenpyo_id {
+    my ($dbh, $user_id, $val) = @_;
+    return undef unless defined $val && "$val" =~ /^\d+$/;
+    my $ok = $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE id=? AND user_id=?', undef, 0 + $val, $user_id);
+    return $ok ? 0 + $val : undef;
 }
 
 # DB の文字列を数値/JSON 型に整える
 sub event_json {
-    my ($r, $tag_ids) = @_;
+    my ($r) = @_;
     return {
         id          => 0 + $r->{id},
         start_year  => 0 + $r->{start_year},
@@ -301,7 +264,7 @@ sub event_json {
         end_day     => numornull($r->{end_day}),
         title       => $r->{title},
         detail      => $r->{detail},
-        tag_ids     => $tag_ids || [],
+        nenpyo_id   => numornull($r->{nenpyo_id}),
         created     => 0 + $r->{created},
         updated     => 0 + $r->{updated},
     };
@@ -407,20 +370,19 @@ eval {
               ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id",
             { Slice => {} }, $u->{id}
         );
-        my $map = event_tag_map($dbh, $u->{id});
-        respond([ map { event_json($_, $map->{ $_->{id} } || []) } @$rows ]);
+        respond([ map { event_json($_) } @$rows ]);
     }
     elsif ($action eq 'event' && $method eq 'POST') {
         my $u = require_user($dbh);
         my $body = read_body_json();
         my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
+        my $nid = owned_nenpyo_id($dbh, $u->{id}, $body->{nenpyo_id});
         my $id = $dbh->selectrow_array(
-            'INSERT INTO events (user_id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail)
-             VALUES (?,?,?,?,?,?,?,?,?) RETURNING id',
-            undef, $u->{id}, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail
+            'INSERT INTO events (user_id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id',
+            undef, $u->{id}, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid
         );
-        set_event_tags($dbh, $u->{id}, $id, $body->{tag_ids});
-        respond(event_json(event_row($dbh, $u->{id}, $id), event_tag_ids($dbh, $id)));
+        respond(event_json(event_row($dbh, $u->{id}, $id)));
     }
     elsif ($action eq 'event' && $method eq 'PUT') {
         my $u  = require_user($dbh);
@@ -429,15 +391,15 @@ eval {
         fail('not found', '404 Not Found') unless event_row($dbh, $u->{id}, $id);
         my $body = read_body_json();
         my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
+        my $nid = owned_nenpyo_id($dbh, $u->{id}, $body->{nenpyo_id});
         $dbh->do(
             'UPDATE events SET start_year=?, start_month=?, start_day=?,
                                end_year=?, end_month=?, end_day=?,
-                               title=?, detail=?, updated_at=now()
+                               title=?, detail=?, nenpyo_id=?, updated_at=now()
               WHERE id=? AND user_id=?',
-            undef, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $id, $u->{id}
+            undef, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid, $id, $u->{id}
         );
-        set_event_tags($dbh, $u->{id}, $id, $body->{tag_ids});
-        respond(event_json(event_row($dbh, $u->{id}, $id), event_tag_ids($dbh, $id)));
+        respond(event_json(event_row($dbh, $u->{id}, $id)));
     }
     elsif ($action eq 'event' && $method eq 'DELETE') {
         my $u  = require_user($dbh);
@@ -463,8 +425,7 @@ eval {
                     e.end_year, e.end_month, e.end_day, e.title, e.detail
                FROM nenpyo t
                JOIN users u ON u.id = t.user_id
-               JOIN event_tags et ON et.tag_id = t.id
-               JOIN events e ON e.id = et.event_id
+               JOIN events e ON e.nenpyo_id = t.id
               ORDER BY u.username, t.sort_order, t.id,
                        e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
             { Slice => {} }

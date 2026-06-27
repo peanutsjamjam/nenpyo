@@ -516,8 +516,8 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             const left = pct(s)
             const right = pct(end)
             const width = Math.max(0.4, right - left)
-            // 色はイベントが属する年表のもの。tag_ids から最初に見つかった年表の色を使う。
-            const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
+            // 色はイベントが属する年表のもの。
+            const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
             const title = e.title || '（無題）'
             // バーが完全に画面外なら矢印で方向を示す
             const offLeft = end < rangeStart
@@ -863,7 +863,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [confirmDeleteTagId, setConfirmDeleteTagId] = useState<number | null>(null)
   // タグ一覧と、編集中イベントに付けるタグID
   const [tags, setTags] = useState<Tag[]>([])
-  const [formTagIds, setFormTagIds] = useState<number[]>([])
+  const [formNenpyoId, setFormNenpyoId] = useState<number | null>(null)
   const [addingTag, setAddingTag] = useState(false) // 「タグの追加」モーダルを開いているか
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState<string | null>(null) // null=色なし(prime=false)
@@ -926,8 +926,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 年表一覧（ユーザーが決めた並び順 sort_order）。
   const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
 
-  // イベントが属する年表の id（最大1つ）。無ければ undefined。
-  const timelineIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
+  // イベントが属する年表の id（最大1つ）。無ければ null。
+  const timelineIdOf = (e: EventItem) => e.nenpyo_id
 
   // 年表ごとの所属イベント（開始順。events はバックエンドで開始順）。
   const eventsByTimeline = new Map<number, EventItem[]>()
@@ -1001,7 +1001,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       input = {
         start_year: start.year, start_month: start.month, start_day: start.day,
         end_year: end.year, end_month: end.month, end_day: end.day,
-        title, detail, tag_ids: formTagIds,
+        title, detail, nenpyo_id: formNenpyoId,
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1015,7 +1015,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         // 以後は更新扱いに。入力途中のテキストは保持したいので resetForm はしない。
         setSelectedId(created.id)
         setIsNew(false)
-        setFormTagIds(created.tag_ids)
+        setFormNenpyoId(created.nenpyo_id)
         await reload()
       } else if (selectedId != null) {
         await api.updateEvent(selectedId, input)
@@ -1026,7 +1026,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     } finally {
       savingRef.current = false
     }
-  }, [startText, endText, title, detail, formTagIds, isNew, selectedId, reload, scheduleSave])
+  }, [startText, endText, title, detail, formNenpyoId, isNew, selectedId, reload, scheduleSave])
 
   useEffect(() => { autoSaveRef.current = autoSave }, [autoSave])
 
@@ -1049,7 +1049,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setSelectedId(e.id)
     setIsNew(false)
     setConfirmDelete(false)
-    setFormTagIds(e.tag_ids)
+    setFormNenpyoId(e.nenpyo_id)
     resetForm(
       dateToText(e.start_year, e.start_month, e.start_day),
       dateToText(e.end_year, e.end_month, e.end_day),
@@ -1064,7 +1064,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setSelectedId(null)
     setIsNew(true)
     setConfirmDelete(false)
-    setFormTagIds(timelineId != null ? [timelineId] : [])
+    setFormNenpyoId(timelineId ?? null)
     resetForm()
   }
 
@@ -1075,7 +1075,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setIsNew(false)
     setConfirmDelete(false)
     setError('')
-    setFormTagIds([])
+    setFormNenpyoId(null)
     resetForm()
   }
 
@@ -1107,10 +1107,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     if (tagSaveTimer.current != null) { clearTimeout(tagSaveTimer.current); tagSaveTimer.current = null }
     try {
       await api.deleteTag(id)
-      setFormTagIds((ids) => ids.filter((x) => x !== id))
+      setFormNenpyoId((cur) => (cur === id ? null : cur))
       setEditingTagId(null)
       await reloadTags()
-      await reload() // イベントの tag_ids も更新される
+      await reload() // 年表削除でイベントの nenpyo_id も SET NULL される
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -1352,7 +1352,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 </div>
               </div>
               {(() => {
-                const tl = timelines.find((t) => formTagIds.includes(t.id))
+                const tl = timelines.find((t) => t.id === formNenpyoId)
                 return (
                   <div className="fld">
                     <span className="fld-head">年表</span>

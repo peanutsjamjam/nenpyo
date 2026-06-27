@@ -111,19 +111,16 @@ for my $uname (sort keys %seed) {
       undef, $uid, $name, $color, $order, $u->{created});
   }
 
-  # events + event_tags
+  # events（属する年表は1つ。複数列挙されていても先頭=sort_order最小を採用）
   for my $e (@{ $u->{events} }) {
     my ($sy,$sm,$sd,$ey,$em,$ed,$title,$detail,$tagnames) = @$e;
-    my $eid = $dbh->selectrow_array(
+    my $nid = (ref $tagnames eq 'ARRAY' && @$tagnames) ? $tagid{$tagnames->[0]} : undef;
+    $dbh->do(
       'INSERT INTO events
          (user_id, start_year, start_month, start_day, end_year, end_month, end_day,
-          title, detail, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id',
-      undef, $uid, $sy,$sm,$sd,$ey,$em,$ed, $title, $detail, $u->{created}, $u->{created});
-    for my $tn (@$tagnames) {
-      $dbh->do('INSERT INTO event_tags (event_id, tag_id) VALUES (?,?)',
-        undef, $eid, $tagid{$tn});
-    }
+          title, detail, nenpyo_id, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      undef, $uid, $sy,$sm,$sd,$ey,$em,$ed, $title, $detail, $nid, $u->{created}, $u->{created});
   }
 
   printf "%-6s id=%d  tags=%d  events=%d\n",
