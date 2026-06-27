@@ -171,6 +171,18 @@ sub require_user {
 }
 
 # ---- 出来事 ----------------------------------------------------------------
+# うるう年判定（1582年より前はユリウス暦、以降はグレゴリオ暦）と月の日数（日の検証用）。
+sub is_leap {
+    my $y = shift;
+    return ($y % 4 == 0) ? 1 : 0 if $y < 1582;                       # ユリウス暦
+    (($y % 4 == 0 && $y % 100 != 0) || $y % 400 == 0) ? 1 : 0;       # グレゴリオ暦
+}
+sub days_in_month {
+    my ($y, $m) = @_;
+    my @ml = (31, is_leap($y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+    return $ml[$m - 1];
+}
+
 # 年月日の3つ組を検証。year_required が真なら年は必須。
 # 年が無ければ (undef,undef,undef) を返す。月無しで日のみ／年無しで月のみは不可。
 sub clean_date {
@@ -193,7 +205,9 @@ sub clean_date {
     }
     if (defined $d && "$d" ne '') {
         fail("${label}の日は月とともに指定してください") unless defined $month;
-        fail("${label}の日が不正です") unless "$d" =~ /^\d+$/ && $d >= 1 && $d <= 31;
+        fail("${label}の日が不正です") unless "$d" =~ /^\d+$/;
+        my $dim = days_in_month($year, $month);
+        fail("${label}の日が範囲外です（${month}月は${dim}日まで）") unless $d >= 1 && $d <= $dim;
         $day = 0 + $d;
     }
     return ($year, $month, $day);

@@ -131,38 +131,53 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
   )
 }
 
-// 年月日を「時間軸の座標」に変換（バー・グリッドの位置計算用）。
-// 西暦0年は存在しないので AD1 を座標 0 とし、AD と BC を隙間なく連続させる。
-//   AD年(>=1): pos = (year-1) + 月日の小数   → AD1 の頭が 0
-//   BC年(<=-1): pos =  year   + 月日の小数   → 1BC は [-1, 0) を占め、12/31 が AD1/1/1 の直前に来る
-// 月日が無ければ開始は年頭・終了は年末扱い。
+// ---- 暦（1582年より前はユリウス暦、以降はグレゴリオ暦でうるう年判定）------------
+// 月ごとに実際の日数を持つ（2月は平年28日・閏年29日）。
+// 注: グレゴリオ改暦(1582/10)で消えた10日間のズレ自体はモデル化していない（閏年判定のみ切替）。
+function isLeap(year: number): boolean {
+  if (year < 1582) return year % 4 === 0 // ユリウス暦: 4で割り切れれば閏年
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 // グレゴリオ暦
+}
+function daysInYear(year: number): number { return isLeap(year) ? 366 : 365 }
+function monthLengths(year: number): number[] {
+  return [31, isLeap(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+}
+function daysInMonth(year: number, month: number): number { return monthLengths(year)[month - 1] }
+
+// 年月日を「時間軸の座標」に変換（バー・グリッドの位置計算用）。単位は「年」。
+// 西暦0年は存在しないので AD1/1/1 を座標 0 とし、AD と BC を隙間なく連続させる。
+// 年内は通算日(0始まり)をその年の実日数で割った割合で表す（=各月が実際の長さを持つ）。
+//   AD年(>=1): pos = (year-1) + 年内割合 / BC年(<=-1): pos = year + 年内割合
+// 月日が無ければ年頭扱い。
 function fracYear(year: number, month: number | null, day: number | null): number {
+  const ml = monthLengths(year)
+  let doy = (day ?? 1) - 1                 // 0 始まりの通算日
   const m = (month ?? 1) - 1
-  const d = (day ?? 1) - 1
-  const frac = (m + d / 31) / 12
-  return (year >= 1 ? year - 1 : year) + frac
+  for (let i = 0; i < m; i++) doy += ml[i]
+  const base = year >= 1 ? year - 1 : year
+  return base + doy / daysInYear(year)
 }
 
-// 時間軸の座標 → 年・月（fracYear の逆変換）。0年は無いので AD は +1 のずれを補正。
-function posToYM(pos: number): { year: number; month: number } {
-  const monthsTotal = Math.round(pos * 12)
-  if (pos >= 0) {
-    const ym1 = Math.floor(monthsTotal / 12)
-    return { year: ym1 + 1, month: monthsTotal - ym1 * 12 + 1 }
-  }
-  const year = Math.floor(monthsTotal / 12)
-  return { year, month: monthsTotal - year * 12 + 1 }
-}
-
-// 時間軸の座標 → 年・月・日。1年=12ヶ月×31スロット（fracYear と同じ日割り）。
-const SLOTS_PER_YEAR = 12 * 31
+// 時間軸の座標 → 年・月・日（fracYear の逆変換）。
 function posToYMD(pos: number): { year: number; month: number; day: number } {
-  const slots = Math.round(pos * SLOTS_PER_YEAR)
-  const base = Math.floor(slots / SLOTS_PER_YEAR)        // AD: year-1, BC: year
-  const rem = slots - base * SLOTS_PER_YEAR               // 0..371
-  const month = Math.floor(rem / 31) + 1
-  const day = (rem % 31) + 1
-  return { year: pos >= 0 ? base + 1 : base, month, day }
+  const base = Math.floor(pos)                       // AD: year-1, BC: year
+  const year = pos >= 0 ? base + 1 : base
+  const diy = daysInYear(year)
+  let doy = Math.round((pos - base) * diy)            // 0 始まりの通算日
+  if (doy < 0) doy = 0
+  if (doy >= diy) doy = diy - 1                       // 丸めで翌年頭に出ないよう抑える
+  const ml = monthLengths(year)
+  let month = 1
+  for (let i = 0; i < 12; i++) {
+    if (doy < ml[i]) { month = i + 1; break }
+    doy -= ml[i]
+  }
+  return { year, month, day: doy + 1 }
+}
+// 時間軸の座標 → 年・月（日は捨てる）。
+function posToYM(pos: number): { year: number; month: number } {
+  const { year, month } = posToYMD(pos)
+  return { year, month }
 }
 
 // 上バー（グリッド線）用の年表記。BC の前／AD の後ろの空白を詰める。1000年以上は AD なし。
@@ -173,8 +188,8 @@ function gridYearLabel(year: number): string {
 }
 
 // グリッド刻みとズーム範囲（座標=年単位）。最小は1日、最大は10万年スケール。
-const DAY = 1 / SLOTS_PER_YEAR        // ≈ 0.00269 年（1日）
-const MONTH = 1 / 12
+const DAY = 1 / 366                   // 公称1日（刻み選択・最小ズーム・現在帯幅用。実日幅は年で可変）
+const MONTH = 1 / 12                  // 公称1ヶ月（刻み選択用）
 const GRID_STEPS = [DAY, MONTH, 1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
 const MIN_YEARS = DAY                 // 表示幅の下限（約1日）
 const MAX_YEARS = 40000               // 表示幅の上限
@@ -183,9 +198,12 @@ const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS
 const MAX_GRID_LINES_AT_1000PX = 25  // メイン領域の横幅 1000px あたりの縦線の最大本数（幅に比例）
 const NOW_FADE_PX = 24               // 現在帯（赤）がこのpx幅に近づくほど薄くする（小さいほど早く薄くなる）
 
-// 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
-const unitWidth = (month: number | null, day: number | null) =>
-  day != null ? DAY : month != null ? MONTH : 1
+// 指定された最も細かい単位の「座標上の幅」（日=1/年日数、月=その月の実日数/年日数、年=1）
+function unitWidth(year: number, month: number | null, day: number | null): number {
+  if (day != null) return 1 / daysInYear(year)
+  if (month != null) return daysInMonth(year, month) / daysInYear(year)
+  return 1
+}
 // バー位置計算に必要な日付フィールドだけの構造的な型（EventItem も ExploreEvent も満たす）。
 type EventDates = {
   start_year: number; start_month: number | null; start_day: number | null
@@ -195,8 +213,8 @@ type EventDates = {
 function eventSpan(e: EventDates): { s: number; end: number } {
   const s = fracYear(e.start_year, e.start_month, e.start_day)
   const end = e.end_year == null
-    ? s + unitWidth(e.start_month, e.start_day)
-    : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_month, e.end_day)
+    ? s + unitWidth(e.start_year, e.start_month, e.start_day)
+    : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_year, e.end_month, e.end_day)
   return { s, end }
 }
 
@@ -226,24 +244,35 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
       if (p < rangeStart || p > rangeEnd || gridLines.length >= lineCap) continue
       gridLines.push({ left: pct(p), major: y === 1, topLabel: '', bottomLabel: gridYearLabel(y) })
     }
-  } else {
-    // 月・日グリッド: 等間隔（year 0 をまたがないので従来どおり）
-    const kStart = Math.ceil(rangeStart / gridStep)
-    const kEnd = Math.floor(rangeEnd / gridStep)
-    for (let k = kStart; k <= kEnd && gridLines.length < lineCap; k++) {
-      const p = k * gridStep
-      let topLabel = ''
-      let bottomLabel: string
-      if (gridStep === MONTH) {
-        const { year, month } = posToYM(p)
-        bottomLabel = `${month}月`
-        if (month === 1) topLabel = gridYearLabel(year)
-      } else {
-        const { year, month, day } = posToYMD(p)
-        bottomLabel = `${day}日`
-        if (day === 1) topLabel = `${gridYearLabel(year)} ${month}月`
+  } else if (gridStep >= MONTH) {
+    // 月グリッド: 実際の各月1日に線を引く（月幅は実際の長さに比例）。1月の上に年。
+    const start = posToYMD(rangeStart)
+    let y = start.year, m = start.month
+    while (gridLines.length < lineCap) {
+      const p = fracYear(y, m, 1)
+      if (p > rangeEnd) break
+      if (p >= rangeStart) {
+        gridLines.push({
+          left: pct(p), major: y === 1 && m === 1,
+          topLabel: m === 1 ? gridYearLabel(y) : '', bottomLabel: `${m}月`,
+        })
       }
-      gridLines.push({ left: pct(p), major: k === 0, topLabel, bottomLabel })
+      m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } // 西暦0年は飛ばす
+    }
+  } else {
+    // 日グリッド: 実際の各日に線を引く（その月の実日数まで＝偽の29/30/31日は出ない）。
+    const start = posToYMD(rangeStart)
+    let y = start.year, m = start.month, d = start.day
+    while (gridLines.length < lineCap) {
+      const p = fracYear(y, m, d)
+      if (p > rangeEnd) break
+      if (p >= rangeStart) {
+        let topLabel = ''
+        if (d === 1) topLabel = m === 1 ? `${gridYearLabel(y)} 1月` : `${m}月`
+        gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: `${d}日` })
+      }
+      d++
+      if (d > daysInMonth(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } }
     }
   }
   return gridLines

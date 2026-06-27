@@ -123,6 +123,15 @@ export function formatDateAD(year: number, month: number | null, day: number | n
 
 export type ParsedDate = { year: number | null; month: number | null; day: number | null }
 
+// うるう年判定（1582年より前はユリウス暦、以降はグレゴリオ暦）と月の日数（入力検証用）。
+function isLeap(year: number): boolean {
+  if (year < 1582) return year % 4 === 0 // ユリウス暦
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 // グレゴリオ暦
+}
+function daysInMonth(year: number, month: number): number {
+  return [31, isLeap(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+}
+
 // テキストを年月日に解析する。
 //   空文字       -> 日付なし (year=null)
 //   半角数字のみ -> 年のみ              例: "1853"
@@ -149,7 +158,10 @@ export function parseDateText(text: string): ParsedDate {
   // 西暦0年は存在しない（紀元前1年の翌日は西暦1年）。紀元前は先頭に「-」（例: -1）。
   if (year === 0) throw new Error('西暦0年は存在しません（紀元前は先頭に「-」、例: -1）')
   if (month != null && (month < 1 || month > 12)) throw new Error(`月が範囲外です: ${month}`)
-  if (day != null && (day < 1 || day > 31)) throw new Error(`日が範囲外です: ${day}`)
+  if (day != null) {
+    const max = daysInMonth(year, month as number) // 月が無ければ day も無いので month は非null
+    if (day < 1 || day > max) throw new Error(`日が範囲外です: ${month}月は${max}日まで`)
+  }
   return { year, month, day }
 }
 
