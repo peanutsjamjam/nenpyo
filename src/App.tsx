@@ -197,6 +197,9 @@ const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サ
 const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS .chart-row と一致させる）
 const MAX_GRID_LINES_AT_1000PX = 25  // メイン領域の横幅 1000px あたりの縦線の最大本数（幅に比例）
 const NOW_FADE_PX = 24               // 現在帯（赤）がこのpx幅に近づくほど薄くする（小さいほど早く薄くなる）
+// バーの実描画範囲はビューポート(0〜100%)の外側にこの%までに収める。
+// 巨大な要素はブラウザがペイントしないため、長いバーが消える現象を防ぐ（見た目は overflow:hidden で同じ）。
+const BAR_CLAMP = 200
 
 // 指定された最も細かい単位の「座標上の幅」（日=1/年日数、月=その月の実日数/年日数、年=1）
 function unitWidth(year: number, month: number | null, day: number | null): number {
@@ -531,7 +534,9 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             const { s, end } = eventSpan(e)
             const left = pct(s)
             const right = pct(end)
-            const width = Math.max(0.4, right - left)
+            // バー要素の実描画範囲はビューポート±BAR_CLAMP% に収める（巨大要素対策）。
+            const barLeft = Math.max(left, -BAR_CLAMP)
+            const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
             // 色はイベントが属する年表のもの。
             const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
             const title = e.title || '（無題）'
@@ -559,7 +564,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
                   {!offLeft && !offRight && (
                     <div
                       className="chart-bar"
-                      style={{ left: `${left}%`, width: `${width}%`, ...(barColor ? { background: barColor } : {}) }}
+                      style={{ left: `${barLeft}%`, width: `${barWidth}%`, ...(barColor ? { background: barColor } : {}) }}
                       title={tip}
                       onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
                     />
@@ -834,13 +839,14 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
             const { s, end } = eventSpan(e)
             const left = pct(s)
             const right = pct(end)
-            const width = Math.max(0.4, right - left)
+            const barLeft = Math.max(left, -BAR_CLAMP)
+            const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
             const title = e.title || '（無題）'
             const tip = `${title}（${formatRangeAD(e)}）`
             return (
               <div className={'chart-row' + (e.id === selectedId ? ' selected' : '')} key={e.id}>
                 <div className="chart-track">
-                  <div className="chart-bar" style={{ left: `${left}%`, width: `${width}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
+                  <div className="chart-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
                   <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
                 </div>
               </div>
