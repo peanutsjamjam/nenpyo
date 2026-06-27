@@ -1289,6 +1289,36 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
       <div className="body" ref={bodyRef}>
         <aside className="list" ref={listRef} style={{ width: sidebarWidth }}>
+          <div className="list-pane" style={paneStyle('timelines', timelinesCollapsed)}>
+            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
+            <div className="list-head">
+              <button className="list-collapse" title={timelinesCollapsed ? '展開する' : '畳む'} onClick={() => setTimelinesCollapsed((v) => !v)}>
+                {timelinesCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span className="list-head-title">年表</span>
+              </button>
+              <button className="list-add-btn" title="年表を追加" onClick={() => { setTimelinesCollapsed(false); startAddTimeline() }}>
+                <Plus size={15} />
+              </button>
+            </div>
+            {!timelinesCollapsed && (<>
+            {timelines.length === 0 && <p className="tag-empty">「＋」で年表を作成できます。</p>}
+            <ul className="tag-list">
+              {timelines.map((t) => (
+                  <li key={t.id} className="tag-item">
+                    <span className="tag-swatch" style={{ background: t.color }} />
+                    <span className="tag-name">{t.name}</span>
+                    <span className="tag-count">{eventCountByTimeline.get(t.id) ?? 0}件</span>
+                    <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                  </li>
+              ))}
+            </ul>
+            </>)}
+          </div>
+
+          {!timelinesCollapsed && !eventsCollapsed && (
+            <div className="pane-resizer" onMouseDown={startPaneResize('timelines', 'events')} title="ドラッグで高さを変更" />
+          )}
+
           <div className="list-pane" style={paneStyle('events', eventsCollapsed)}>
           {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">イベントリストエリア</span></div>}
           <div className="list-head">
@@ -1329,36 +1359,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             })}
           </ul>
           </>)}
-          </div>
-
-          {!eventsCollapsed && !timelinesCollapsed && (
-            <div className="pane-resizer" onMouseDown={startPaneResize('events', 'timelines')} title="ドラッグで高さを変更" />
-          )}
-
-          <div className="list-pane" style={paneStyle('timelines', timelinesCollapsed)}>
-            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
-            <div className="list-head">
-              <button className="list-collapse" title={timelinesCollapsed ? '展開する' : '畳む'} onClick={() => setTimelinesCollapsed((v) => !v)}>
-                {timelinesCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                <span className="list-head-title">年表</span>
-              </button>
-              <button className="list-add-btn" title="年表を追加" onClick={() => { setTimelinesCollapsed(false); startAddTimeline() }}>
-                <Plus size={15} />
-              </button>
-            </div>
-            {!timelinesCollapsed && (<>
-            {timelines.length === 0 && <p className="tag-empty">「＋」で年表を作成できます。</p>}
-            <ul className="tag-list">
-              {timelines.map((t) => (
-                  <li key={t.id} className="tag-item">
-                    <span className="tag-swatch" style={{ background: t.color }} />
-                    <span className="tag-name">{t.name}</span>
-                    <span className="tag-count">{eventCountByTimeline.get(t.id) ?? 0}件</span>
-                    <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
-                  </li>
-              ))}
-            </ul>
-            </>)}
           </div>
         </aside>
 
