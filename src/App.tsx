@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
-import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent } from './api'
+import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
 import './App.css'
 
 // 開発用ボタンの表示フラグ。本番で隠す／不要になったら false に（または削除）。
@@ -896,6 +896,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [confirmDeleteTagId, setConfirmDeleteTagId] = useState<number | null>(null)
   // タグ一覧と、編集中イベントに付けるタグID
   const [tags, setTags] = useState<Tag[]>([])
+  // フォロー中の年表（他ユーザー・読み取り専用）とそのイベント
+  const [followedTimelines, setFollowedTimelines] = useState<FollowedTimeline[]>([])
+  const [followedEvents, setFollowedEvents] = useState<EventItem[]>([])
   const [formNenpyoId, setFormNenpyoId] = useState<number | null>(null)
   const [addingTag, setAddingTag] = useState(false) // 「タグの追加」モーダルを開いているか
   const [newTagName, setNewTagName] = useState('')
@@ -971,15 +974,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     window.addEventListener('mouseup', onUp)
   }
 
-  // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。年表はすべて色を持つ。
-  const tagColors = new Map(tags.map((t) => [t.id, t.color]))
-  // 年表一覧（ユーザーが決めた並び順 sort_order）。
+  // nenpyo_id -> 色 の対応（期間バー・ドットの着色）。自分＋フォロー中の年表すべて。
+  const tagColors = new Map<number, string>()
+  for (const t of tags) tagColors.set(t.id, t.color)
+  for (const ft of followedTimelines) tagColors.set(ft.nenpyo_id, ft.color)
+  // 自分の年表一覧（ユーザーが決めた並び順 sort_order）。
   const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
 
   // イベントが属する年表の id（最大1つ）。無ければ null。
   const timelineIdOf = (e: EventItem) => e.nenpyo_id
 
-  // 年表ごとの所属イベント（開始順。events はバックエンドで開始順）。
+  // 年表ごとの所属イベント（自分のイベント。開始順）。
   const eventsByTimeline = new Map<number, EventItem[]>()
   for (const e of events) {
     const id = timelineIdOf(e)
@@ -988,13 +993,24 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       if (arr) arr.push(e); else eventsByTimeline.set(id, [e])
     }
   }
-  // 左の一覧の並び: 年表ごとにまとめ、その後に未所属。
-  const listEvents = [
-    ...timelines.flatMap((t) => events.filter((e) => timelineIdOf(e) === t.id)),
-    ...events.filter((e) => timelineIdOf(e) == null),
+  // フォロー中の年表ごとの所属イベント（読み取り専用）。
+  const followedEventsByTimeline = new Map<number, EventItem[]>()
+  for (const e of followedEvents) {
+    if (e.nenpyo_id != null) {
+      const arr = followedEventsByTimeline.get(e.nenpyo_id)
+      if (arr) arr.push(e); else followedEventsByTimeline.set(e.nenpyo_id, [e])
+    }
+  }
+  // 自分のイベントが「自分のものか」の判定用（フォロー分は編集不可）。
+  const myEventIds = new Set(events.map((e) => e.id))
+  // メイン領域の行順: 自分の年表ごと → 未所属 → フォロー中の年表ごと。
+  const orderedEvents = [
+    ...timelines.flatMap((t) => events.filter((e) => e.nenpyo_id === t.id)),
+    ...events.filter((e) => e.nenpyo_id == null),
+    ...followedTimelines.flatMap((ft) => followedEventsByTimeline.get(ft.nenpyo_id) ?? []),
   ]
-  // メイン領域に表示するイベント: チェックを外した（非表示）年表のものを除く（未所属は常に表示）。
-  const chartEvents = listEvents.filter((e) => e.nenpyo_id == null || !hiddenTimelines.has(e.nenpyo_id))
+  // 非表示（チェックを外した）年表のイベントを除く（未所属は常に表示）。
+  const chartEvents = orderedEvents.filter((e) => e.nenpyo_id == null || !hiddenTimelines.has(e.nenpyo_id))
 
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
@@ -1022,7 +1038,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     }
   }, [])
 
-  useEffect(() => { reload(); reloadTags() }, [reload, reloadTags])
+  const reloadFollows = useCallback(async () => {
+    try {
+      const d = await api.getFollowed()
+      setFollowedTimelines(d.timelines)
+      setFollowedEvents(d.events)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
+  useEffect(() => { reload(); reloadTags(); reloadFollows() }, [reload, reloadTags, reloadFollows])
 
   // ---- 自動保存 ------------------------------------------------------------
   // テキスト欄はフォーカスが外れたとき、タグはクリックされたときに 0.5 秒後を予約し、
@@ -1096,6 +1122,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const selectEvent = (e: EventItem) => {
+    // フォロー中（他ユーザー）のイベントは読み取り専用。選択だけして編集画面は開かない。
+    if (!myEventIds.has(e.id)) { setChartSelectedId(e.id); return }
     flushSave()
     setShowSettings(false)
     setSelectedId(e.id)
@@ -1361,6 +1389,51 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                   </li>
                 )
               })}
+
+              {/* フォロー中の年表（他ユーザー・読み取り専用） */}
+              {followedTimelines.length > 0 && <li className="tl-section-label">フォロー中</li>}
+              {followedTimelines.map((ft) => {
+                const fEvents = followedEventsByTimeline.get(ft.nenpyo_id) ?? []
+                const open = expandedTimelines.has(ft.nenpyo_id)
+                return (
+                  <li key={ft.nenpyo_id} className="timeline-group">
+                    <div className="tag-item">
+                      <button className="tl-toggle" title={open ? '畳む' : '展開する'} onClick={() => toggleTimelineOpen(ft.nenpyo_id)}>
+                        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                      <input
+                        type="checkbox"
+                        className="tl-visible"
+                        checked={!hiddenTimelines.has(ft.nenpyo_id)}
+                        onChange={() => toggleTimelineVisible(ft.nenpyo_id)}
+                        title="メイン領域に表示する"
+                      />
+                      <span className="tag-name" style={{ background: ft.color, color: textColorFor(ft.color) }}>{ft.name}</span>
+                      <span className="tag-owner">@{ft.owner}</span>
+                      <span className="tag-count">{fEvents.length}件</span>
+                    </div>
+                    {open && fEvents.length > 0 && (
+                      <ul className="timeline-events">
+                        {fEvents.map((e) => (
+                          <li
+                            key={e.id}
+                            className={'tl-sub' + (e.id === chartSelectedId ? ' selected' : '')}
+                            onClick={() => {
+                              setChartSelectedId(e.id)
+                              if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
+                            }}
+                          >
+                            <div className="tl-sub-content">
+                              <span className="tl-sub-date">{formatRangeAD(e)}</span>
+                              <span className="tl-sub-title">{e.title || '（無題）'}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
             </>)}
           </div>
@@ -1370,8 +1443,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
         <main className="editor">
           {showExplorer ? (
-              <Explorer onClose={() => setShowExplorer(false)} username={username} />
-            ) : events.length > 0 ? (
+              <Explorer onClose={() => setShowExplorer(false)} username={username} onFollowChange={reloadFollows} />
+            ) : (events.length > 0 || followedEvents.length > 0) ? (
               <TimelineChart
                 events={chartEvents}
                 selectedId={chartSelectedId}

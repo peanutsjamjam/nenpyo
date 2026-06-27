@@ -30,6 +30,7 @@ use MIME::Base64 ();
 #   DELETE ?action=tag&id=<id>                     -> 年表削除
 #   POST   ?action=tags_reorder  {ids:[..]}        -> 年表の並び順を配列順に更新
 #   GET    ?action=follows                         -> フォロー中の年表一覧（所有者名つき）
+#   GET    ?action=followed                        -> フォロー中の年表＋そのイベント（読み取り用）
 #   POST   ?action=follow    {nenpyo_id}           -> 年表をフォロー（自分のは不可）
 #   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除
 
@@ -515,6 +516,32 @@ eval {
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
         $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'followed' && $method eq 'GET') {
+        # フォロー中の年表と、それに属するイベント（本画面に読み取り専用で混ぜる用）
+        my $u = require_user($dbh);
+        my $tls = $dbh->selectall_arrayref(
+            'SELECT n.id AS nenpyo_id, n.name, n.color, ou.username AS owner
+               FROM follows f
+               JOIN nenpyo n ON n.id = f.nenpyo_id
+               JOIN users ou ON ou.id = n.user_id
+              WHERE f.follower_user_id = ?
+              ORDER BY ou.username, n.sort_order, n.id',
+            { Slice => {} }, $u->{id}
+        );
+        my $evs = $dbh->selectall_arrayref(
+            "SELECT $EVENT_COLS FROM events
+              WHERE nenpyo_id IN (SELECT nenpyo_id FROM follows WHERE follower_user_id = ?)
+              ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id",
+            { Slice => {} }, $u->{id}
+        );
+        respond({
+            timelines => [ map { {
+                nenpyo_id => 0 + $_->{nenpyo_id}, name => $_->{name},
+                color => $_->{color}, owner => $_->{owner},
+            } } @$tls ],
+            events => [ map { event_json($_) } @$evs ],
+        });
     }
     elsif ($action eq 'follows' && $method eq 'GET') {
         # 自分がフォローしている年表（所有者名・色つき）

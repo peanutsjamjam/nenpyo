@@ -54,6 +54,11 @@ PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events / follows)
 | PUT | tag&id=ID | `{name,color}` 更新（本人のみ） |
 | DELETE | tag&id=ID | 削除（本人のみ。所属イベントの nenpyo_id は NULL に） |
 | POST | tags_reorder | `{ids:[..]}` 並び順を配列順に更新（sort_order を 1..n） |
+| GET | explore | 全ユーザーの年表＋イベント（各年表に `followed` 付き） |
+| GET | follows | フォロー中の年表一覧（所有者名つき） |
+| GET | followed | フォロー中の年表＋そのイベント（本画面に読み取り混在用） |
+| POST | follow | `{nenpyo_id}` 年表をフォロー（自分の年表は不可） |
+| DELETE | follow&nenpyo_id=ID | フォロー解除 |
 
 ## 開発・公開フロー
 

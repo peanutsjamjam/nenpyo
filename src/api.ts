@@ -72,6 +72,12 @@ export type FollowedTimeline = {
   owner: string
 }
 
+// フォロー中の年表＋イベント（本画面に読み取り専用で混ぜる）
+export type FollowedData = {
+  timelines: FollowedTimeline[]
+  events: EventItem[]
+}
+
 const API = `${import.meta.env.BASE_URL}api.cgi`
 
 async function call<T>(method: string, action: string, opts: { id?: number; body?: unknown } = {}): Promise<T> {
@@ -112,6 +118,7 @@ export const api = {
   explore: () => call<ExploreTag[]>('GET', 'explore'),
   // フォロー
   listFollows: () => call<FollowedTimeline[]>('GET', 'follows'),
+  getFollowed: () => call<FollowedData>('GET', 'followed'),
   follow: (nenpyoId: number) => call<{ ok: true }>('POST', 'follow', { body: { nenpyo_id: nenpyoId } }),
   unfollow: (nenpyoId: number) => call<{ ok: true }>('DELETE', `follow&nenpyo_id=${nenpyoId}`),
 }

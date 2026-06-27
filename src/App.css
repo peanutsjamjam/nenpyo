@@ -320,6 +320,10 @@
 .tl-visible { flex: 0 0 auto; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 /* 年表項目: 所属イベント件数 */
 .tag-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+/* フォロー中の年表: 所有者名バッジ */
+.tag-owner { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+/* サイドバーの「フォロー中」区切りラベル */
+.tl-section-label { list-style: none; margin: 12px 0 4px; padding: 4px 2px 0; border-top: 1px solid var(--border); font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
 /* 年表ツリー: タイトル行左の展開トグル */
 .tl-toggle {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
