@@ -870,8 +870,14 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [editingTagId, setEditingTagId] = useState<number | null>(null)
   const [editTagName, setEditTagName] = useState('')
   // 左サイドバーの一覧の畳み状態
-  const [eventsCollapsed, setEventsCollapsed] = useState(false)
   const [timelinesCollapsed, setTimelinesCollapsed] = useState(false)
+  // 年表ごとの「配下イベントを展開しているか」（年表 id の集合）
+  const [expandedTimelines, setExpandedTimelines] = useState<Set<number>>(new Set())
+  const toggleTimelineOpen = (id: number) => setExpandedTimelines((prev) => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
   // 開発用: メイン領域を可視化するオーバーレイ
   const [devOverlay, setDevOverlay] = useState(false)
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
@@ -892,53 +898,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_KEY, String(Math.round(sidebarWidth))) } catch { /* 無視 */ }
   }, [sidebarWidth])
-
-  // 左サイドバー2エリア（イベント / 年表）の高さ配分（flex-grow の比）。
-  // ドラッグで両エリア間の比を付け替える。localStorage に保存。
-  const listRef = useRef<HTMLElement>(null)
-  const PANE_GROW_KEY = 'nenpyo-pane-grow'
-  type PaneKey = 'events' | 'timelines'
-  const [paneGrow, setPaneGrow] = useState<Record<PaneKey, number>>(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(PANE_GROW_KEY) || 'null')
-      if (v && ['events', 'timelines'].every((k) => typeof v[k] === 'number' && v[k] > 0)) return v
-    } catch { /* 無視 */ }
-    return { events: 3, timelines: 3 }
-  })
-  useEffect(() => {
-    try { localStorage.setItem(PANE_GROW_KEY, JSON.stringify(paneGrow)) } catch { /* 無視 */ }
-  }, [paneGrow])
-
-  const paneStyle = (key: PaneKey, collapsed: boolean) =>
-    collapsed ? { flex: '0 0 auto' as const } : { flex: `${paneGrow[key]} 1 0`, minHeight: 0 }
-
-  // a と b の境界をドラッグして、2エリア間で高さ（grow 比）を付け替える。
-  const startPaneResize = (a: PaneKey, b: PaneKey) => (e: ReactMouseEvent) => {
-    e.preventDefault()
-    const H = listRef.current?.clientHeight || 1
-    const startY = e.clientY
-    const start = paneGrow
-    const G = start.events + start.timelines
-    const onMove = (ev: MouseEvent) => {
-      const dG = ((ev.clientY - startY) / H) * G
-      let ga = start[a] + dG
-      let gb = start[b] - dG
-      const min = 0.25
-      if (ga < min) { gb -= min - ga; ga = min }
-      if (gb < min) { ga -= min - gb; gb = min }
-      setPaneGrow((p) => ({ ...p, [a]: ga, [b]: gb }))
-    }
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-    }
-    document.body.style.userSelect = 'none'
-    document.body.style.cursor = 'row-resize'
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
 
   // 仕切りをドラッグして左欄の幅を変える
   const startResize = (e: ReactMouseEvent) => {
@@ -967,12 +926,18 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 年表一覧（ユーザーが決めた並び順 sort_order）。
   const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
 
-  // 年表ごとの所属イベント件数（tag_id -> 件数）。
-  const eventCountByTimeline = new Map<number, number>()
-  for (const e of events) for (const id of e.tag_ids) eventCountByTimeline.set(id, (eventCountByTimeline.get(id) ?? 0) + 1)
-
   // イベントが属する年表の id（最大1つ）。無ければ undefined。
   const timelineIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
+
+  // 年表ごとの所属イベント（開始順。events はバックエンドで開始順）。
+  const eventsByTimeline = new Map<number, EventItem[]>()
+  for (const e of events) {
+    const id = timelineIdOf(e)
+    if (id != null) {
+      const arr = eventsByTimeline.get(id)
+      if (arr) arr.push(e); else eventsByTimeline.set(id, [e])
+    }
+  }
   // 左の一覧の並び: 年表ごとにまとめ、その後に未所属。
   const listEvents = [
     ...timelines.flatMap((t) => events.filter((e) => timelineIdOf(e) === t.id)),
@@ -1092,13 +1057,14 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     )
   }
 
-  const startNew = () => {
+  // 新規イベント追加。年表 id を渡すと、その年表に属する状態で開く。
+  const startNew = (timelineId?: number) => {
     flushSave()
     setShowSettings(false)
     setSelectedId(null)
     setIsNew(true)
     setConfirmDelete(false)
-    setFormTagIds([])
+    setFormTagIds(timelineId != null ? [timelineId] : [])
     resetForm()
   }
 
@@ -1288,8 +1254,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       </header>
 
       <div className="body" ref={bodyRef}>
-        <aside className="list" ref={listRef} style={{ width: sidebarWidth }}>
-          <div className="list-pane" style={paneStyle('timelines', timelinesCollapsed)}>
+        <aside className="list" style={{ width: sidebarWidth }}>
+          <div className="list-pane" style={timelinesCollapsed ? { flex: '0 0 auto' } : { flex: '1 1 0', minHeight: 0 }}>
             {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={timelinesCollapsed ? '展開する' : '畳む'} onClick={() => setTimelinesCollapsed((v) => !v)}>
@@ -1303,62 +1269,47 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             {!timelinesCollapsed && (<>
             {timelines.length === 0 && <p className="tag-empty">「＋」で年表を作成できます。</p>}
             <ul className="tag-list">
-              {timelines.map((t) => (
-                  <li key={t.id} className="tag-item">
-                    <span className="tag-swatch" style={{ background: t.color }} />
-                    <span className="tag-name">{t.name}</span>
-                    <span className="tag-count">{eventCountByTimeline.get(t.id) ?? 0}件</span>
-                    <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+              {timelines.map((t) => {
+                const tEvents = eventsByTimeline.get(t.id) ?? []
+                const open = expandedTimelines.has(t.id)
+                return (
+                  <li key={t.id} className="timeline-group">
+                    <div className="tag-item">
+                      <button className="tl-toggle" title={open ? '畳む' : '展開する'} onClick={() => toggleTimelineOpen(t.id)}>
+                        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                      <span className="tag-swatch" style={{ background: t.color }} />
+                      <span className="tag-name">{t.name}</span>
+                      <span className="tag-count">{tEvents.length}件</span>
+                      <button className="tag-icon-btn" title="この年表にイベントを追加" onClick={() => { setExpandedTimelines((p) => new Set(p).add(t.id)); startNew(t.id) }}><Plus size={15} /></button>
+                      <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                    </div>
+                    {open && tEvents.length > 0 && (
+                      <ul className="timeline-events">
+                        {tEvents.map((e) => (
+                          <li
+                            key={e.id}
+                            className={'tl-sub' + (e.id === chartSelectedId ? ' selected' : '')}
+                            onClick={() => {
+                              setChartSelectedId(e.id)
+                              if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
+                            }}
+                            onDoubleClick={() => selectEvent(e)}
+                          >
+                            <div className="tl-sub-content">
+                              <span className="tl-sub-date">{formatRangeAD(e)}</span>
+                              <span className="tl-sub-title">{e.title || '（無題）'}</span>
+                            </div>
+                            <button className="tag-icon-btn" title="編集" onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
-              ))}
+                )
+              })}
             </ul>
             </>)}
-          </div>
-
-          {!timelinesCollapsed && !eventsCollapsed && (
-            <div className="pane-resizer" onMouseDown={startPaneResize('timelines', 'events')} title="ドラッグで高さを変更" />
-          )}
-
-          <div className="list-pane" style={paneStyle('events', eventsCollapsed)}>
-          {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">イベントリストエリア</span></div>}
-          <div className="list-head">
-            <button className="list-collapse" title={eventsCollapsed ? '展開する' : '畳む'} onClick={() => setEventsCollapsed((v) => !v)}>
-              {eventsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-              <span className="list-head-title">イベント</span>
-            </button>
-            <button className="list-add-btn" title="出来事を追加" onClick={startNew}>
-              <Plus size={15} />
-            </button>
-          </div>
-          {!eventsCollapsed && (<>
-          {events.length === 0 && <p className="empty">まだ出来事がありません。<br />右上の「＋」から登録してください。</p>}
-          <ul className="timeline">
-            {listEvents.map((e) => {
-              // イベントが属する年表の色を使う（tag_ids から最初に見つかった年表）
-              const dotColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
-              return (
-                <li
-                  key={e.id}
-                  className={e.id === chartSelectedId ? 'tl-item selected' : 'tl-item'}
-                  onClick={() => {
-                    setChartSelectedId(e.id)
-                    if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
-                  }}
-                  onDoubleClick={() => selectEvent(e)}
-                >
-                  <div className="tl-dot" style={dotColor ? { borderColor: dotColor } : undefined} />
-                  <div className="tl-content">
-                    <div className="tl-date">{formatRangeAD(e)}</div>
-                    <div className="tl-title">{e.title || '（無題）'}</div>
-                  </div>
-                  <button className="tl-edit" title="編集" onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}>
-                    <Pencil size={15} />
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-          </>)}
           </div>
         </aside>
 
