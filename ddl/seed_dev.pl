@@ -99,16 +99,16 @@ for my $uname (sort keys %seed) {
      VALUES (?,?,?,?,?) RETURNING id',
     undef, $uname, $hash, $salt, $PBKDF2_ITER, $u->{created});
 
-  # prime タグ
+  # 年表（nenpyo）
   my %tagid;
   my $order = 0;
   for my $t (@{ $u->{tags} }) {
     $order++;
     my ($name, $color) = @$t;
     $tagid{$name} = $dbh->selectrow_array(
-      'INSERT INTO tags (user_id, name, color, prime, sort_order, created_at)
-       VALUES (?,?,?,?,?,?) RETURNING id',
-      undef, $uid, $name, $color, 1, $order, $u->{created});
+      'INSERT INTO nenpyo (user_id, name, color, sort_order, created_at)
+       VALUES (?,?,?,?,?) RETURNING id',
+      undef, $uid, $name, $color, $order, $u->{created});
   }
 
   # events + event_tags

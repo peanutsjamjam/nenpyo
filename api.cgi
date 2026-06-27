@@ -24,11 +24,11 @@ use MIME::Base64 ();
 #   POST   ?action=event     {..., tag_ids:[..]}   -> 追加
 #   PUT    ?action=event&id=<id>  {同上}           -> 更新
 #   DELETE ?action=event&id=<id>                   -> 削除
-#   GET    ?action=tags                            -> 自分のタグ一覧
-#   POST   ?action=tag       {name,color}          -> タグ作成
-#   PUT    ?action=tag&id=<id>    {name,color}     -> タグ更新
-#   DELETE ?action=tag&id=<id>                     -> タグ削除
-#   POST   ?action=tags_reorder  {ids:[..]}        -> タグの並び順を配列順に更新
+#   GET    ?action=tags                            -> 自分の年表一覧（nenpyo）
+#   POST   ?action=tag       {name,color}          -> 年表作成
+#   PUT    ?action=tag&id=<id>    {name,color}     -> 年表更新
+#   DELETE ?action=tag&id=<id>                     -> 年表削除
+#   POST   ?action=tags_reorder  {ids:[..]}        -> 年表の並び順を配列順に更新
 
 my $COOKIE_NAME  = 'nenpyo_sid';
 my $COOKIE_PATH  = '/~sugawara/nenpyo/';
@@ -244,12 +244,12 @@ sub event_row {
 sub numornull { defined $_[0] ? 0 + $_[0] : undef }
 
 # ユーザーの全イベントについて event_id -> [tag_id...] のマップを作る。
-# タグ名昇順で並べるので、配列の先頭が「期間バーの色」に使われるタグになる。
+# 年表名昇順で並べるので、配列の先頭が「期間バーの色」に使われる年表になる。
 sub event_tag_map {
     my ($dbh, $user_id) = @_;
     my $rows = $dbh->selectall_arrayref(
         'SELECT et.event_id, et.tag_id FROM event_tags et
-           JOIN tags t ON t.id = et.tag_id
+           JOIN nenpyo t ON t.id = et.tag_id
           WHERE t.user_id = ?
           ORDER BY t.name, t.id',
         { Slice => {} }, $user_id
@@ -259,12 +259,12 @@ sub event_tag_map {
     return \%map;
 }
 
-# 1イベント分の tag_id 配列（タグ名昇順）
+# 1イベント分の tag_id 配列（年表名昇順）
 sub event_tag_ids {
     my ($dbh, $event_id) = @_;
     my $rows = $dbh->selectcol_arrayref(
         'SELECT et.tag_id FROM event_tags et
-           JOIN tags t ON t.id = et.tag_id
+           JOIN nenpyo t ON t.id = et.tag_id
           WHERE et.event_id = ?
           ORDER BY t.name, t.id',
         undef, $event_id
@@ -279,7 +279,7 @@ sub set_event_tags {
     return unless ref $tag_ids eq 'ARRAY' && @$tag_ids;
     my $sth = $dbh->prepare(
         'INSERT INTO event_tags (event_id, tag_id)
-         SELECT ?, id FROM tags WHERE id = ? AND user_id = ?
+         SELECT ?, id FROM nenpyo WHERE id = ? AND user_id = ?
          ON CONFLICT DO NOTHING'
     );
     for my $tid (@$tag_ids) {
@@ -307,22 +307,18 @@ sub event_json {
     };
 }
 
-# タグ入力の検証。(name, color, prime) を返す。prime は省略時 false。
+# 年表入力の検証。(name, color) を返す。
 sub clean_tag {
     my ($body) = @_;
     my $name = defined $body->{name} ? $body->{name} : '';
     $name =~ s/^\s+|\s+$//g;
     $name =~ s/[\r\n]/ /g;
-    fail('タグ名を入力してください') if $name eq '';
-    fail('タグ名は40文字以内にしてください') if length($name) > 40;
+    fail('年表名を入力してください') if $name eq '';
+    fail('年表名は40文字以内にしてください') if length($name) > 40;
     my $color = defined $body->{color} && "$body->{color}" ne '' ? $body->{color} : '#9a6b3f';
     fail('色の形式が正しくありません（例: #aabbcc）') unless $color =~ /^#[0-9a-fA-F]{6}$/;
-    my $prime = $body->{prime} ? 1 : 0;
-    return ($name, lc $color, $prime);
+    return ($name, lc $color);
 }
-
-# DBD::Pg の真偽値（既定では 1/0）を JSON 真偽へ。't'/'f' でも安全に扱う。
-sub pgbool { my $v = $_[0]; (defined $v && $v ne '' && $v ne '0' && lc $v ne 'f') ? JSON::PP::true : JSON::PP::false }
 
 sub tag_json {
     my ($r) = @_;
@@ -330,7 +326,6 @@ sub tag_json {
         id    => 0 + $r->{id},
         name  => $r->{name},
         color => $r->{color},
-        prime => pgbool($r->{prime}),
         sort_order => 0 + ($r->{sort_order} // 0),
     };
 }
@@ -454,23 +449,22 @@ eval {
     elsif ($action eq 'tags' && $method eq 'GET') {
         my $u = require_user($dbh);
         my $rows = $dbh->selectall_arrayref(
-            'SELECT id, name, color, prime, sort_order FROM tags WHERE user_id = ? ORDER BY name, id',
+            'SELECT id, name, color, sort_order FROM nenpyo WHERE user_id = ? ORDER BY sort_order, id',
             { Slice => {} }, $u->{id}
         );
         respond([ map { tag_json($_) } @$rows ]);
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
-        # 全ユーザーのプライムタグと、それに含まれるイベントを返す（年表は全公開）。
+        # 全ユーザーの年表と、それに含まれるイベントを返す（全公開）。
         require_user($dbh);
         my $rows = $dbh->selectall_arrayref(
             'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
                     e.id AS event_id, e.start_year, e.start_month, e.start_day,
                     e.end_year, e.end_month, e.end_day, e.title, e.detail
-               FROM tags t
+               FROM nenpyo t
                JOIN users u ON u.id = t.user_id
                JOIN event_tags et ON et.tag_id = t.id
                JOIN events e ON e.id = et.event_id
-              WHERE t.prime
               ORDER BY u.username, t.sort_order, t.id,
                        e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
             { Slice => {} }
@@ -502,15 +496,15 @@ eval {
     }
     elsif ($action eq 'tag' && $method eq 'POST') {
         my $u = require_user($dbh);
-        # 新規タグは既定で prime=false（色を持たない）。並び順は末尾（最大+1）。
-        my ($name, $color, $prime) = clean_tag(read_body_json());
-        fail('同じ名前のタグが既にあります', '409 Conflict')
-            if $dbh->selectrow_array('SELECT 1 FROM tags WHERE user_id=? AND name=?', undef, $u->{id}, $name);
-        my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM tags WHERE user_id=?', undef, $u->{id});
+        # 新規の年表。並び順は末尾（最大+1）。
+        my ($name, $color) = clean_tag(read_body_json());
+        fail('同じ名前の年表が既にあります', '409 Conflict')
+            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=?', undef, $u->{id}, $name);
+        my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM nenpyo WHERE user_id=?', undef, $u->{id});
         my $row = $dbh->selectrow_hashref(
-            'INSERT INTO tags (user_id, name, color, prime, sort_order) VALUES (?,?,?,?,?)
-             RETURNING id, name, color, prime, sort_order',
-            undef, $u->{id}, $name, $color, $prime, $next
+            'INSERT INTO nenpyo (user_id, name, color, sort_order) VALUES (?,?,?,?)
+             RETURNING id, name, color, sort_order',
+            undef, $u->{id}, $name, $color, $next
         );
         respond(tag_json($row));
     }
@@ -519,8 +513,8 @@ eval {
         my $body = read_body_json();
         my $ids = $body->{ids};
         fail('ids が配列ではありません') unless ref $ids eq 'ARRAY';
-        # 配列の並び順で sort_order を 1..n に振り直す（本人のタグのみ）。
-        my $sth = $dbh->prepare('UPDATE tags SET sort_order=? WHERE id=? AND user_id=?');
+        # 配列の並び順で sort_order を 1..n に振り直す（本人の年表のみ）。
+        my $sth = $dbh->prepare('UPDATE nenpyo SET sort_order=? WHERE id=? AND user_id=?');
         my $pos = 0;
         for my $tid (@$ids) {
             next unless defined $tid && "$tid" =~ /^\d+$/;
@@ -528,7 +522,7 @@ eval {
             $sth->execute($pos, 0 + $tid, $u->{id});
         }
         my $rows = $dbh->selectall_arrayref(
-            'SELECT id, name, color, prime, sort_order FROM tags WHERE user_id = ? ORDER BY name, id',
+            'SELECT id, name, color, sort_order FROM nenpyo WHERE user_id = ? ORDER BY sort_order, id',
             { Slice => {} }, $u->{id}
         );
         respond([ map { tag_json($_) } @$rows ]);
@@ -538,27 +532,21 @@ eval {
         my $id = query_param('id');
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
         fail('not found', '404 Not Found')
-            unless $dbh->selectrow_array('SELECT 1 FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+            unless $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         my $body = read_body_json();
-        my ($name, $color, $prime) = clean_tag($body);
-        fail('同じ名前のタグが既にあります', '409 Conflict')
-            if $dbh->selectrow_array('SELECT 1 FROM tags WHERE user_id=? AND name=? AND id<>?', undef, $u->{id}, $name, $id);
-        # prime はリクエストに含まれているときだけ更新する（設定の色変更などでは保持）。
-        if (exists $body->{prime}) {
-            $dbh->do('UPDATE tags SET name=?, color=?, prime=? WHERE id=? AND user_id=?',
-                undef, $name, $color, $prime, $id, $u->{id});
-        } else {
-            $dbh->do('UPDATE tags SET name=?, color=? WHERE id=? AND user_id=?',
-                undef, $name, $color, $id, $u->{id});
-        }
-        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, prime, sort_order FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        my ($name, $color) = clean_tag($body);
+        fail('同じ名前の年表が既にあります', '409 Conflict')
+            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=? AND id<>?', undef, $u->{id}, $name, $id);
+        $dbh->do('UPDATE nenpyo SET name=?, color=? WHERE id=? AND user_id=?',
+            undef, $name, $color, $id, $u->{id});
+        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, sort_order FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond(tag_json($cur));
     }
     elsif ($action eq 'tag' && $method eq 'DELETE') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
-        $dbh->do('DELETE FROM tags WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }
     else {

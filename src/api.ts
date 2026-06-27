@@ -28,18 +28,17 @@ export type EventInput = {
   tag_ids: number[]
 }
 
+// 年表（旧 tag）。すべて色と並び順を持つ（prime の区別は廃止）。
 export type Tag = {
   id: number
   name: string
   color: string
-  prime: boolean
   sort_order: number
 }
 
 export type TagInput = {
   name: string
   color?: string
-  prime?: boolean
 }
 
 // エクスプローラー用: 1イベント分（自分のものではないので tag_ids 等は不要）

@@ -68,7 +68,7 @@ npm run build    # dist/ を更新 = 公開サイトに即反映
 - システムperl `/usr/bin/perl` に `perl-DBI` / `perl-DBD-Pg` / `perl-JSON-PP` / `perl-Digest-SHA` を導入済み
   （`sudo dnf install` で。`/usr/local/bin/perl` 5.36 には DBI が無いので注意）。
 - DB `nenpyo` は作成済み。スキーマは `ddl/` にリレーションごとに置いてある。
-  新規構築は依存順に流す: `for f in users sessions events tags event_tags follows; do psql -d nenpyo -f ddl/$f.sql; done`。
+  新規構築は依存順に流す: `for f in users sessions events nenpyo event_tags follows; do psql -d nenpyo -f ddl/$f.sql; done`。
 - CGI は suexec で `sugawara` として動くため、peer 認証でパスワード無し接続できる。
 
 ## 開発用シードデータ

@@ -516,7 +516,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             const left = pct(s)
             const right = pct(end)
             const width = Math.max(0.4, right - left)
-            // 色は「色を持つ（=prime）タグ」のものを使う。tag_ids 内に普通タグが先頭に来ても拾えるよう全件から探す。
+            // 色はイベントが属する年表のもの。tag_ids から最初に見つかった年表の色を使う。
             const barColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
             const title = e.title || '（無題）'
             // バーが完全に画面外なら矢印で方向を示す
@@ -688,7 +688,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 }
 
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
-// あるユーザーの、あるプライムタグに含まれるイベントだけを期間バーで表示する。
+// あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
 function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
   tag: ExploreTag
@@ -786,7 +786,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
   )
 }
 
-// ---- エクスプローラー（他ユーザーの年表を Primeタグ単位で見ていく）--------------
+// ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
 function Explorer({ onClose }: { onClose: () => void }) {
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
   const [error, setError] = useState('')
@@ -810,7 +810,7 @@ function Explorer({ onClose }: { onClose: () => void }) {
       {strips == null ? (
         <p className="explorer-note">読み込み中…</p>
       ) : strips.length === 0 ? (
-        <p className="explorer-note">表示できるプライムタグがありません。</p>
+        <p className="explorer-note">表示できる年表がありません。</p>
       ) : (
         <div className="explorer-strips" onClick={() => setSelStripId(null)}>
           {strips.map((s) => (
@@ -871,8 +871,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [editTagName, setEditTagName] = useState('')
   // 左サイドバーの一覧の畳み状態
   const [eventsCollapsed, setEventsCollapsed] = useState(false)
-  const [tagsCollapsed, setTagsCollapsed] = useState(false)
-  const [primeTagsCollapsed, setPrimeTagsCollapsed] = useState(false)
+  const [timelinesCollapsed, setTimelinesCollapsed] = useState(false)
   // 開発用: メイン領域を可視化するオーバーレイ
   const [devOverlay, setDevOverlay] = useState(false)
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
@@ -894,17 +893,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     try { localStorage.setItem(SIDEBAR_KEY, String(Math.round(sidebarWidth))) } catch { /* 無視 */ }
   }, [sidebarWidth])
 
-  // 左サイドバー3エリア（イベント/Primeタグ/タグ）の高さ配分（flex-grow の比）。
-  // ドラッグで隣り合う2エリア間の比を付け替える。localStorage に保存。
+  // 左サイドバー2エリア（イベント / 年表）の高さ配分（flex-grow の比）。
+  // ドラッグで両エリア間の比を付け替える。localStorage に保存。
   const listRef = useRef<HTMLElement>(null)
   const PANE_GROW_KEY = 'nenpyo-pane-grow'
-  type PaneKey = 'events' | 'prime' | 'normal'
+  type PaneKey = 'events' | 'timelines'
   const [paneGrow, setPaneGrow] = useState<Record<PaneKey, number>>(() => {
     try {
       const v = JSON.parse(localStorage.getItem(PANE_GROW_KEY) || 'null')
-      if (v && ['events', 'prime', 'normal'].every((k) => typeof v[k] === 'number' && v[k] > 0)) return v
+      if (v && ['events', 'timelines'].every((k) => typeof v[k] === 'number' && v[k] > 0)) return v
     } catch { /* 無視 */ }
-    return { events: 3, prime: 2, normal: 3 }
+    return { events: 3, timelines: 3 }
   })
   useEffect(() => {
     try { localStorage.setItem(PANE_GROW_KEY, JSON.stringify(paneGrow)) } catch { /* 無視 */ }
@@ -919,7 +918,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     const H = listRef.current?.clientHeight || 1
     const startY = e.clientY
     const start = paneGrow
-    const G = start.events + start.prime + start.normal
+    const G = start.events + start.timelines
     const onMove = (ev: MouseEvent) => {
       const dG = ((ev.clientY - startY) / H) * G
       let ga = start[a] + dG
@@ -963,18 +962,21 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     window.addEventListener('mouseup', onUp)
   }
 
-  // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。色を持てるのは prime のタグだけ。
-  const tagColors = new Map(tags.filter((t) => t.prime).map((t) => [t.id, t.color]))
-  // prime はユーザーが決めた並び順（sort_order）、普通タグはタグ名順（バックエンドの並び）。
-  const primeTagList = tags.filter((t) => t.prime).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
-  const normalTagList = tags.filter((t) => !t.prime)
+  // tag_id -> 色 の対応（期間バー・ドットの着色に使う）。年表はすべて色を持つ。
+  const tagColors = new Map(tags.map((t) => [t.id, t.color]))
+  // 年表一覧（ユーザーが決めた並び順 sort_order）。
+  const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
 
-  // イベントが持つ prime タグの id（最大1つ）。無ければ undefined。
-  const primeIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
-  // 左の一覧の並び: prime タグ付きを先に（同一 prime でまとめ、タグ名順）、その後に prime なし。
+  // 年表ごとの所属イベント件数（tag_id -> 件数）。
+  const eventCountByTimeline = new Map<number, number>()
+  for (const e of events) for (const id of e.tag_ids) eventCountByTimeline.set(id, (eventCountByTimeline.get(id) ?? 0) + 1)
+
+  // イベントが属する年表の id（最大1つ）。無ければ undefined。
+  const timelineIdOf = (e: EventItem) => e.tag_ids.find((id) => tagColors.has(id))
+  // 左の一覧の並び: 年表ごとにまとめ、その後に未所属。
   const listEvents = [
-    ...primeTagList.flatMap((t) => events.filter((e) => primeIdOf(e) === t.id)),
-    ...events.filter((e) => primeIdOf(e) == null),
+    ...timelines.flatMap((t) => events.filter((e) => timelineIdOf(e) === t.id)),
+    ...events.filter((e) => timelineIdOf(e) == null),
   ]
 
   // 設定をドキュメントへ反映＆ localStorage に保存
@@ -1111,33 +1113,24 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     resetForm()
   }
 
-  // 普通の（prime でない）タグ: 好きなだけトグル
-  const toggleFormTag = (id: number) => {
-    setFormTagIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
+  // イベントが属する年表: 1つだけ選べる。選び直すと差し替え、同じものを再度押すと解除。
+  const selectTimeline = (id: number) => {
+    setFormTagIds((ids) => ids.includes(id) ? [] : [id])
   }
 
-  // プライムタグ: 1つだけ選べる。選び直すと差し替え、同じものを再度押すと解除。
-  const selectPrimeTag = (id: number) => {
-    setFormTagIds((ids) => {
-      const primeIds = new Set(tags.filter((t) => t.prime).map((t) => t.id))
-      const withoutPrime = ids.filter((x) => !primeIds.has(x))
-      return ids.includes(id) ? withoutPrime : [...withoutPrime, id]
-    })
-  }
-
-  // タグ名編集中に色見本をクリックして色を選んだとき: prime=true にして色を設定（即時保存）
+  // 年表編集中に色見本をクリックして色を選んだとき: 色を設定（即時保存）
   const pickTagColor = async (t: Tag, color: string) => {
     try {
-      await api.updateTag(t.id, { name: t.name, color, prime: true })
+      await api.updateTag(t.id, { name: t.name, color })
       await reloadTags()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  // prime タグの並びを上(-1)/下(+1)へ入れ替えて保存する
-  const movePrimeTag = async (id: number, dir: -1 | 1) => {
-    const ids = primeTagList.map((t) => t.id)
+  // 年表の並びを上(-1)/下(+1)へ入れ替えて保存する
+  const moveTimeline = async (id: number, dir: -1 | 1) => {
+    const ids = timelines.map((t) => t.id)
     const i = ids.indexOf(id)
     const j = i + dir
     if (i < 0 || j < 0 || j >= ids.length) return
@@ -1187,7 +1180,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       const name = newTagName.trim()
       if (name === '') return
       try {
-        const created = await api.createTag(newTagColor ? { name, color: newTagColor, prime: true } : { name })
+        const created = await api.createTag({ name, color: newTagColor ?? '#9a6b3f' })
         await reloadTags()
         setAddingTag(false)
         setEditingTagId(created.id)
@@ -1204,7 +1197,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     const name = editTagName.trim()
     if (name === '' || name === t.name) return // 空・変更なしは何もしない
     try {
-      // 名前のみ変更。色は現状を維持して送る（prime はサーバー側で保持される）
+      // 名前のみ変更。色は現状を維持して送る。
       await api.updateTag(t.id, { name, color: t.color })
       await reloadTags()
     } catch (err) {
@@ -1222,8 +1215,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       // 追加中に閉じる: 名前があれば作成だけして終わる（編集モードへは移行しない）。
       const name = newTagName.trim()
       if (name !== '') {
-        const color = newTagColor
-        api.createTag(color ? { name, color, prime: true } : { name })
+        api.createTag({ name, color: newTagColor ?? '#9a6b3f' })
           .then(() => reloadTags())
           .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       }
@@ -1235,12 +1227,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     setNewTagName(''); setNewTagColor(null)
   }
 
-  // Prime/タグ いずれかの「＋」から、タグ追加モーダルを開く。
-  const startAddTag = (prime: boolean) => {
+  // 「＋」から年表の追加モーダルを開く（年表は必ず色を持つ）。
+  const startAddTimeline = () => {
     setError('')
     setEditingTagId(null)
     setNewTagName('')
-    setNewTagColor(prime ? '#9a6b3f' : null) // 色ありで作成すると prime タグになる
+    setNewTagColor('#9a6b3f')
     setAddingTag(true)
   }
 
@@ -1312,7 +1304,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           {events.length === 0 && <p className="empty">まだ出来事がありません。<br />右上の「＋」から登録してください。</p>}
           <ul className="timeline">
             {listEvents.map((e) => {
-              // 色を持つ（=prime）タグの色を使う（普通タグが先頭でも拾えるよう全件から探す）
+              // イベントが属する年表の色を使う（tag_ids から最初に見つかった年表）
               const dotColor = e.tag_ids.map((id) => tagColors.get(id)).find(Boolean)
               return (
                 <li
@@ -1339,58 +1331,30 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           </>)}
           </div>
 
-          {!eventsCollapsed && !primeTagsCollapsed && (
-            <div className="pane-resizer" onMouseDown={startPaneResize('events', 'prime')} title="ドラッグで高さを変更" />
+          {!eventsCollapsed && !timelinesCollapsed && (
+            <div className="pane-resizer" onMouseDown={startPaneResize('events', 'timelines')} title="ドラッグで高さを変更" />
           )}
 
-          <div className="list-pane" style={paneStyle('prime', primeTagsCollapsed)}>
-            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">Primeタグエリア</span></div>}
+          <div className="list-pane" style={paneStyle('timelines', timelinesCollapsed)}>
+            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
             <div className="list-head">
-              <button className="list-collapse" title={primeTagsCollapsed ? '展開する' : '畳む'} onClick={() => setPrimeTagsCollapsed((v) => !v)}>
-                {primeTagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                <span className="list-head-title">Primeタグ</span>
+              <button className="list-collapse" title={timelinesCollapsed ? '展開する' : '畳む'} onClick={() => setTimelinesCollapsed((v) => !v)}>
+                {timelinesCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span className="list-head-title">年表</span>
               </button>
-              <button className="list-add-btn" title="Primeタグを追加" onClick={() => { setPrimeTagsCollapsed(false); startAddTag(true) }}>
+              <button className="list-add-btn" title="年表を追加" onClick={() => { setTimelinesCollapsed(false); startAddTimeline() }}>
                 <Plus size={15} />
               </button>
             </div>
-            {!primeTagsCollapsed && (<>
-            {primeTagList.length === 0 && <p className="tag-empty">「＋」でPrimeタグを作成できます。</p>}
+            {!timelinesCollapsed && (<>
+            {timelines.length === 0 && <p className="tag-empty">「＋」で年表を作成できます。</p>}
             <ul className="tag-list">
-              {primeTagList.map((t) => (
+              {timelines.map((t) => (
                   <li key={t.id} className="tag-item">
                     <span className="tag-swatch" style={{ background: t.color }} />
                     <span className="tag-name">{t.name}</span>
-                    <button className="tag-icon-btn" title="タグを編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
-                  </li>
-              ))}
-            </ul>
-            </>)}
-          </div>
-
-          {!primeTagsCollapsed && !tagsCollapsed && (
-            <div className="pane-resizer" onMouseDown={startPaneResize('prime', 'normal')} title="ドラッグで高さを変更" />
-          )}
-
-          <div className="list-pane" style={paneStyle('normal', tagsCollapsed)}>
-            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">タグエリア</span></div>}
-            <div className="list-head">
-              <button className="list-collapse" title={tagsCollapsed ? '展開する' : '畳む'} onClick={() => setTagsCollapsed((v) => !v)}>
-                {tagsCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                <span className="list-head-title">タグ</span>
-              </button>
-              <button className="list-add-btn" title="タグを追加" onClick={() => { setTagsCollapsed(false); startAddTag(false) }}>
-                <Plus size={15} />
-              </button>
-            </div>
-            {!tagsCollapsed && (<>
-            {normalTagList.length === 0 && <p className="tag-empty">「＋」でタグを作成できます。</p>}
-            <ul className="tag-list">
-              {normalTagList.map((t) => (
-                  <li key={t.id} className="tag-item">
-                    <span className="tag-swatch none" />
-                    <span className="tag-name">{t.name}</span>
-                    <button className="tag-icon-btn" title="タグを編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                    <span className="tag-count">{eventCountByTimeline.get(t.id) ?? 0}件</span>
+                    <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
                   </li>
               ))}
             </ul>
@@ -1461,39 +1425,19 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
               </label>
 
-              <div className="fld">プライムタグ
-                {primeTagList.length === 0 ? (
-                  <p className="hint">プライムタグはありません。</p>
+              <div className="fld">年表
+                {timelines.length === 0 ? (
+                  <p className="hint">年表はありません。左の「年表」欄から作成できます。</p>
                 ) : (
                   <div className="tag-picker">
-                    {primeTagList.map((t) => (
+                    {timelines.map((t) => (
                       <button
                         type="button"
                         key={t.id}
                         className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
-                        onClick={() => { selectPrimeTag(t.id); scheduleSave() }}
+                        onClick={() => { selectTimeline(t.id); scheduleSave() }}
                       >
                         <span className="tag-swatch" style={{ background: t.color }} />
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="fld">タグ
-                {normalTagList.length === 0 ? (
-                  <p className="hint">タグはありません。左の「タグ」欄から作成できます。</p>
-                ) : (
-                  <div className="tag-picker">
-                    {normalTagList.map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
-                        onClick={() => { toggleFormTag(t.id); scheduleSave() }}
-                      >
-                        <span className="tag-swatch none" />
                         {t.name}
                       </button>
                     ))}
@@ -1521,11 +1465,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             const t = editingTagId != null ? tags.find((x) => x.id === editingTagId) : null
             if (editingTagId != null && !t) return null
             const isAdd = t == null
-            const pi = t ? primeTagList.findIndex((p) => p.id === t.id) : -1
-            // 色セクションは prime のときだけ表示（ノーマル追加・ノーマル編集では出さない）。
-            // 追加時は prime の「＋」で newTagColor が入るので、それを prime 判定に使う。
-            const isPrime = isAdd ? newTagColor != null : t!.prime
-            const swatchColor = isAdd ? newTagColor : (t!.prime ? t!.color : null)
+            const pi = t ? timelines.findIndex((p) => p.id === t.id) : -1
+            const swatchColor = isAdd ? newTagColor : t!.color
             const nameValue = isAdd ? newTagName : editTagName
             const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(t!, color) }
             const onNameChange = (v: string) => { isAdd ? setNewTagName(v) : setEditTagName(v) }
@@ -1533,11 +1474,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               <div className="panel-overlay">
                 <div className="form">
                   <div className="form-head">
-                    <h2 className="form-title">{isAdd ? 'タグの追加' : 'タグの編集'}</h2>
+                    <h2 className="form-title">{isAdd ? '年表の追加' : '年表の編集'}</h2>
                     <div className="form-head-actions">
-                      {!isAdd && t!.prime && (<>
-                        <button className="settings-close" onClick={() => movePrimeTag(t!.id, -1)} disabled={pi <= 0} title="上へ" aria-label="上へ"><ChevronUp size={18} /></button>
-                        <button className="settings-close" onClick={() => movePrimeTag(t!.id, 1)} disabled={pi >= primeTagList.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
+                      {!isAdd && (<>
+                        <button className="settings-close" onClick={() => moveTimeline(t!.id, -1)} disabled={pi <= 0} title="上へ" aria-label="上へ"><ChevronUp size={18} /></button>
+                        <button className="settings-close" onClick={() => moveTimeline(t!.id, 1)} disabled={pi >= timelines.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
                       </>)}
                       {!isAdd && (
                         <button className="settings-close" onClick={() => setConfirmDeleteTagId(t!.id)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
@@ -1546,24 +1487,22 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     </div>
                   </div>
 
-                  {isPrime && (
-                    <div className="fld">色
-                      <div>
-                        <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title="クリックで色を選ぶ">
-                          <Palette size={20} />
-                          <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
-                        </label>
-                      </div>
+                  <div className="fld">色
+                    <div>
+                      <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title="クリックで色を選ぶ">
+                        <Palette size={20} />
+                        <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
+                      </label>
                     </div>
-                  )}
+                  </div>
 
                   <label className="fld">
-                    <span className="fld-head">タグ名<span className="char-count">({nameValue.length}/40)</span></span>
+                    <span className="fld-head">年表名<span className="char-count">({nameValue.length}/40)</span></span>
                     <input
                       autoFocus
                       value={nameValue}
                       maxLength={40}
-                      placeholder="タグ名"
+                      placeholder="年表名"
                       onChange={(ev) => onNameChange(ev.target.value)}
                       onBlur={scheduleTagSave}
                       onKeyDown={(ev) => { if (ev.key === 'Escape') closeTagEditor() }}
@@ -1593,7 +1532,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       {confirmDeleteTagId != null && (
         <div className="modal-overlay" onClick={() => setConfirmDeleteTagId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p>このタグを削除しますか？</p>
+            <p>この年表を削除しますか？</p>
             <div className="modal-actions">
               <button onClick={() => setConfirmDeleteTagId(null)}>キャンセル</button>
               <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>削除する</button>
