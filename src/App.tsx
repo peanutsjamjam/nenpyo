@@ -46,6 +46,7 @@ function loadSettings(): AppSettings {
 }
 
 export default function App() {
+  const { t } = useTranslation()
   const [username, setUsername] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -56,7 +57,7 @@ export default function App() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="splash">読み込み中…</div>
+  if (loading) return <div className="splash">{t('common.loading')}</div>
   if (!username) return <AuthView onAuthed={setUsername} />
   return <Timeline username={username} onLogout={() => setUsername(null)} />
 }
@@ -333,6 +334,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
 }) {
+  const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const hbarRef = useRef<HTMLDivElement>(null)
   // ネイティブの wheel ハンドラから最新の中心・表示幅を読むための ref
@@ -538,7 +540,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
             // 色はイベントが属する年表のもの。
             const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
-            const title = e.title || '（無題）'
+            const title = e.title || t('common.untitled')
             // バーが完全に画面外なら矢印で方向を示す
             const offLeft = end < rangeStart
             const offRight = s > rangeEnd
@@ -594,13 +596,13 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
         {selectedEvent ? (
           <div className="chart-sel">
             <div className="chart-sel-head">
-              <span className="chart-sel-title">{selectedEvent.title || '（無題）'}</span>
+              <span className="chart-sel-title">{selectedEvent.title || t('common.untitled')}</span>
               <span className="chart-sel-date">{formatRangeAD(selectedEvent)}</span>
             </div>
             {selectedEvent.detail && <div className="chart-sel-detail">{oneLine(selectedEvent.detail)}</div>}
           </div>
         ) : (
-          <span className="chart-hint-text">イベントを選択すると詳細を表示します</span>
+          <span className="chart-hint-text">{t('chart.selectHint')}</span>
         )}
       </div>
     </div>
@@ -967,6 +969,7 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
 
 // ---- 年表本体 --------------------------------------------------------------
 function Timeline({ username, onLogout }: { username: string; onLogout: () => void }) {
+  const { t } = useTranslation()
   const [events, setEvents] = useState<EventItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [chartSelectedId, setChartSelectedId] = useState<number | null>(null)
@@ -1216,6 +1219,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const selectEvent = (e: EventItem) => {
     // フォロー中（他ユーザー）のイベントは読み取り専用。選択だけして編集画面は開かない。
     if (!myEventIds.has(e.id)) { setChartSelectedId(e.id); return }
+    // 年表の追加/編集フォームが開いている間は、イベント編集を開かない。
+    if (addingTag || editingTagId != null) return
     flushSave()
     setShowSettings(false)
     setSelectedId(e.id)
@@ -1232,6 +1237,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   // 新規イベント追加。年表 id を渡すと、その年表に属する状態で開く。
   const startNew = (timelineId?: number) => {
+    // 年表の追加/編集フォームが開いている間は開かない。
+    if (addingTag || editingTagId != null) return
     flushSave()
     setShowSettings(false)
     setSelectedId(null)
@@ -1290,6 +1297,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const startEditTag = (t: Tag) => {
+    // イベントの追加/編集フォームが開いている間は、年表編集を開かない。
+    if (isNew || selectedId != null) return
     setError('')
     setAddingTag(false)
     setEditingTagId(t.id)
@@ -1363,6 +1372,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
   // 「＋」から年表の追加モーダルを開く（年表は必ず色を持つ）。
   const startAddTimeline = () => {
+    // イベントの追加/編集フォームが開いている間は開かない。
+    if (isNew || selectedId != null) return
     setError('')
     setEditingTagId(null)
     setNewTagName('')
@@ -1396,11 +1407,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     <div className="app">
       <header className="topbar">
         <div className="topbar-left">
-          <div className="brand" onClick={() => window.location.reload()}><ScrollText size={22} /> nenpyo</div>
+          <div className="brand" onClick={() => { if (!showSettings) window.location.reload() }}><ScrollText size={22} /> nenpyo</div>
           {DEV_BUTTON && (
             <button
               className={'icon-btn dev-btn' + (devOverlay ? ' active' : '')}
               title="開発用: メイン領域を表示"
+              disabled={showSettings}
               onClick={() => setDevOverlay((v) => !v)}
             >
               <FlaskConical size={18} />
@@ -1408,7 +1420,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           )}
           <button
             className={'icon-btn' + (showExplorer ? ' active' : '')}
-            title="エクスプローラー（他ユーザーの年表を探す）"
+            title={t('nav.explorer')}
+            disabled={showSettings}
             onClick={() => setShowExplorer((v) => !v)}
           >
             <Compass size={18} />
@@ -1416,8 +1429,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         </div>
         <div className="topbar-right">
           <span className="who">{username}</span>
-          <button className={'icon-btn' + (showSettings ? ' active' : '')} title="設定" onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
-          <button className="icon-btn" title="ログアウト" onClick={logout}><LogOut size={18} /></button>
+          <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
+          <button className="icon-btn" title={t('nav.logout')} onClick={logout}><LogOut size={18} /></button>
         </div>
       </header>
 
@@ -1426,37 +1439,37 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           <div className="list-pane" style={timelinesCollapsed ? { flex: '0 0 auto' } : { flex: '1 1 0', minHeight: 0 }}>
             {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
             <div className="list-head">
-              <button className="list-collapse" title={timelinesCollapsed ? '展開する' : '畳む'} onClick={() => setTimelinesCollapsed((v) => !v)}>
+              <button className="list-collapse" title={timelinesCollapsed ? t('common.expand') : t('common.collapse')} onClick={() => setTimelinesCollapsed((v) => !v)}>
                 {timelinesCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                <span className="list-head-title">年表</span>
+                <span className="list-head-title">{t('sidebar.timelines')}</span>
               </button>
-              <button className="list-add-btn" title="年表を追加" onClick={() => { setTimelinesCollapsed(false); startAddTimeline() }}>
+              <button className="list-add-btn" title={t('sidebar.addTimeline')} onClick={() => { setTimelinesCollapsed(false); startAddTimeline() }}>
                 <Plus size={15} />
               </button>
             </div>
             {!timelinesCollapsed && (<>
-            {timelines.length === 0 && <p className="tag-empty">「＋」で年表を作成できます。</p>}
+            {timelines.length === 0 && <p className="tag-empty">{t('sidebar.emptyTimelines')}</p>}
             <ul className="tag-list">
-              {timelines.map((t) => {
-                const tEvents = eventsByTimeline.get(t.id) ?? []
-                const open = expandedTimelines.has(t.id)
+              {timelines.map((tl) => {
+                const tEvents = eventsByTimeline.get(tl.id) ?? []
+                const open = expandedTimelines.has(tl.id)
                 return (
-                  <li key={t.id} className="timeline-group">
+                  <li key={tl.id} className="timeline-group">
                     <div className="tag-item">
-                      <button className="tl-toggle" title={open ? '畳む' : '展開する'} onClick={() => toggleTimelineOpen(t.id)}>
+                      <button className="tl-toggle" title={open ? t('common.collapse') : t('common.expand')} onClick={() => toggleTimelineOpen(tl.id)}>
                         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
                       <input
                         type="checkbox"
                         className="tl-visible"
-                        checked={!hiddenTimelines.has(t.id)}
-                        onChange={() => toggleTimelineVisible(t.id)}
-                        title="メイン領域に表示する"
+                        checked={!hiddenTimelines.has(tl.id)}
+                        onChange={() => toggleTimelineVisible(tl.id)}
+                        title={t('sidebar.showInMain')}
                       />
-                      <span className="tag-name" style={{ background: t.color, color: textColorFor(t.color) }}>{t.name}</span>
-                      <span className="tag-count">{tEvents.length}件</span>
-                      <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
-                      <button className="tag-icon-btn" title="この年表にイベントを追加" onClick={() => { setExpandedTimelines((p) => new Set(p).add(t.id)); startNew(t.id) }}><Plus size={15} /></button>
+                      <span className="tag-name" style={{ background: tl.color, color: textColorFor(tl.color) }}>{tl.name}</span>
+                      <span className="tag-count">{t('common.itemCount', { n: tEvents.length })}</span>
+                      <button className="tag-icon-btn" title={t('sidebar.editTimeline')} onClick={() => startEditTag(tl)}><Pencil size={15} /></button>
+                      <button className="tag-icon-btn" title={t('sidebar.addEventHere')} onClick={() => { setExpandedTimelines((p) => new Set(p).add(tl.id)); startNew(tl.id) }}><Plus size={15} /></button>
                     </div>
                     {open && tEvents.length > 0 && (
                       <ul className="timeline-events">
@@ -1472,9 +1485,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                           >
                             <div className="tl-sub-content">
                               <span className="tl-sub-date">{formatRangeAD(e)}</span>
-                              <span className="tl-sub-title">{e.title || '（無題）'}</span>
+                              <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
                             </div>
-                            <button className="tag-icon-btn" title="編集" onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
+                            <button className="tag-icon-btn" title={t('common.edit')} onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
                           </li>
                         ))}
                       </ul>
@@ -1484,14 +1497,14 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               })}
 
               {/* フォロー中の年表（他ユーザー・読み取り専用） */}
-              {followedTimelines.length > 0 && <li className="tl-section-label">フォロー中</li>}
+              {followedTimelines.length > 0 && <li className="tl-section-label">{t('sidebar.following')}</li>}
               {followedTimelines.map((ft) => {
                 const fEvents = followedEventsByTimeline.get(ft.nenpyo_id) ?? []
                 const open = expandedTimelines.has(ft.nenpyo_id)
                 return (
                   <li key={ft.nenpyo_id} className="timeline-group">
                     <div className="tag-item">
-                      <button className="tl-toggle" title={open ? '畳む' : '展開する'} onClick={() => toggleTimelineOpen(ft.nenpyo_id)}>
+                      <button className="tl-toggle" title={open ? t('common.collapse') : t('common.expand')} onClick={() => toggleTimelineOpen(ft.nenpyo_id)}>
                         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
                       <input
@@ -1499,11 +1512,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         className="tl-visible"
                         checked={!hiddenTimelines.has(ft.nenpyo_id)}
                         onChange={() => toggleTimelineVisible(ft.nenpyo_id)}
-                        title="メイン領域に表示する"
+                        title={t('sidebar.showInMain')}
                       />
                       <span className="tag-name" style={{ background: ft.color, color: textColorFor(ft.color) }}>{ft.name}</span>
                       <span className="tag-owner">@{ft.owner}</span>
-                      <span className="tag-count">{fEvents.length}件</span>
+                      <span className="tag-count">{t('common.itemCount', { n: fEvents.length })}</span>
                     </div>
                     {open && fEvents.length > 0 && (
                       <ul className="timeline-events">
@@ -1518,7 +1531,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                           >
                             <div className="tl-sub-content">
                               <span className="tl-sub-date">{formatRangeAD(e)}</span>
-                              <span className="tl-sub-title">{e.title || '（無題）'}</span>
+                              <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
                             </div>
                           </li>
                         ))}
@@ -1532,7 +1545,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
           </div>
         </aside>
 
-        <div className="splitter" onMouseDown={startResize} title="ドラッグで幅を変更" />
+        <div className="splitter" onMouseDown={startResize} title={t('common.dragWidth')} />
 
         <main className="editor">
           {showExplorer ? (
@@ -1568,7 +1581,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             ) : (
               <div className="placeholder">
                 <ScrollText size={48} strokeWidth={1} />
-                <p>「出来事を追加」から年表をつくりましょう。</p>
+                <p>{t('sidebar.chartPlaceholder')}</p>
               </div>
             )}
 
@@ -1576,26 +1589,26 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             <div className="panel-overlay">
             <div className="form">
               <div className="form-head">
-                <h2 className="form-title">{isNew ? 'イベントの追加' : 'イベントの編集'}</h2>
+                <h2 className="form-title">{isNew ? t('event.addTitle') : t('event.editTitle')}</h2>
                 <div className="form-head-actions">
                   {!isNew && (
-                    <button className="settings-close" onClick={() => setConfirmDelete(true)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
+                    <button className="settings-close" onClick={() => setConfirmDelete(true)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={18} /></button>
                   )}
-                  <button className="settings-close" onClick={closeEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
+                  <button className="settings-close" onClick={closeEditor} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
                 </div>
               </div>
               {(() => {
-                const tl = timelines.find((t) => t.id === formNenpyoId)
+                const tl = timelines.find((x) => x.id === formNenpyoId)
                 return (
                   <div className="fld">
-                    <span className="fld-head">年表</span>
+                    <span className="fld-head">{t('event.timeline')}</span>
                     <div className="fld-body">
                       <div className="event-timeline">
                         {tl ? (<>
                           <span className="tag-swatch" style={{ background: tl.color }} />
                           <span className="event-timeline-name">{tl.name}</span>
                         </>) : (
-                          <span className="hint">（年表に未所属）</span>
+                          <span className="hint">{t('event.noTimeline')}</span>
                         )}
                       </div>
                     </div>
@@ -1603,7 +1616,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 )
               })()}
               <div className="fld">
-                <span className="fld-head">期間</span>
+                <span className="fld-head">{t('event.period')}</span>
                 <div className="fld-body">
                   <div className="range-row">
                     <input value={startText} placeholder="yyyy/mm/dd"
@@ -1611,12 +1624,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     <span className="range-sep">〜</span>
                     <div className="range-to">
                       <input value={ongoing ? '' : endText} disabled={ongoing}
-                        placeholder={ongoing ? '現在まで継続中' : 'yyyy/mm/dd'}
+                        placeholder={ongoing ? t('event.ongoing') : 'yyyy/mm/dd'}
                         onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
                       <label className="ongoing-check">
                         <input type="checkbox" checked={ongoing}
                           onChange={(e) => { const c = e.target.checked; setOngoing(c); if (c) setEndText(''); scheduleSave() }} />
-                        現在まで継続中
+                        {t('event.ongoing')}
                       </label>
                     </div>
                   </div>
@@ -1624,17 +1637,17 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               </div>
 
               <label className="fld">
-                <span className="fld-head">タイトル</span>
+                <span className="fld-head">{t('event.title')}</span>
                 <div className="fld-body">
-                  <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
+                  <input value={title} maxLength={100} placeholder={t('event.titlePlaceholder')} onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
                   <span className="char-count">({title.length}/100)</span>
                 </div>
               </label>
 
               <label className="fld grow">
-                <span className="fld-head">詳細</span>
+                <span className="fld-head">{t('event.detail')}</span>
                 <div className="fld-body">
-                  <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
+                  <textarea value={detail} maxLength={1000} placeholder={t('event.detailPlaceholder')} onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
                   <span className="char-count">({detail.length}/1000)</span>
                 </div>
               </label>
@@ -1644,46 +1657,36 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             </div>
           )}
 
-          {showSettings && (
-            <div className="panel-overlay" onClick={() => setShowSettings(false)}>
-              <SettingsPanel
-                settings={settings}
-                setSettings={setSettings}
-                onClose={() => setShowSettings(false)}
-              />
-            </div>
-          )}
-
           {(addingTag || editingTagId != null) && (() => {
-            // 追加(isAdd)と編集で同じUIを使う。追加中は下書き(newTag*)、編集中は対象タグ(t)を読む。
-            const t = editingTagId != null ? tags.find((x) => x.id === editingTagId) : null
-            if (editingTagId != null && !t) return null
-            const isAdd = t == null
-            const pi = t ? timelines.findIndex((p) => p.id === t.id) : -1
-            const swatchColor = isAdd ? newTagColor : t!.color
+            // 追加(isAdd)と編集で同じUIを使う。追加中は下書き(newTag*)、編集中は対象年表(tl)を読む。
+            const tl = editingTagId != null ? tags.find((x) => x.id === editingTagId) : null
+            if (editingTagId != null && !tl) return null
+            const isAdd = tl == null
+            const pi = tl ? timelines.findIndex((p) => p.id === tl.id) : -1
+            const swatchColor = isAdd ? newTagColor : tl!.color
             const nameValue = isAdd ? newTagName : editTagName
-            const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(t!, color) }
+            const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(tl!, color) }
             const onNameChange = (v: string) => { isAdd ? setNewTagName(v) : setEditTagName(v) }
             return (
               <div className="panel-overlay">
                 <div className="form">
                   <div className="form-head">
-                    <h2 className="form-title">{isAdd ? '年表の追加' : '年表の編集'}</h2>
+                    <h2 className="form-title">{isAdd ? t('timeline.addTitle') : t('timeline.editTitle')}</h2>
                     <div className="form-head-actions">
                       {!isAdd && (<>
-                        <button className="settings-close" onClick={() => moveTimeline(t!.id, -1)} disabled={pi <= 0} title="上へ" aria-label="上へ"><ChevronUp size={18} /></button>
-                        <button className="settings-close" onClick={() => moveTimeline(t!.id, 1)} disabled={pi >= timelines.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
+                        <button className="settings-close" onClick={() => moveTimeline(tl!.id, -1)} disabled={pi <= 0} title={t('common.moveUp')} aria-label={t('common.moveUp')}><ChevronUp size={18} /></button>
+                        <button className="settings-close" onClick={() => moveTimeline(tl!.id, 1)} disabled={pi >= timelines.length - 1} title={t('common.moveDown')} aria-label={t('common.moveDown')}><ChevronDown size={18} /></button>
                       </>)}
                       {!isAdd && (
-                        <button className="settings-close" onClick={() => setConfirmDeleteTagId(t!.id)} title="削除" aria-label="削除"><Trash2 size={18} /></button>
+                        <button className="settings-close" onClick={() => setConfirmDeleteTagId(tl!.id)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={18} /></button>
                       )}
-                      <button className="settings-close" onClick={closeTagEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
+                      <button className="settings-close" onClick={closeTagEditor} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
                     </div>
                   </div>
 
-                  <div className="fld">色
+                  <div className="fld">{t('timeline.color')}
                     <div>
-                      <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title="クリックで色を選ぶ">
+                      <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title={t('timeline.pickColor')}>
                         <Palette size={20} />
                         <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
                       </label>
@@ -1691,12 +1694,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                   </div>
 
                   <label className="fld">
-                    <span className="fld-head">年表名<span className="char-count">({nameValue.length}/40)</span></span>
+                    <span className="fld-head">{t('timeline.name')}<span className="char-count">({nameValue.length}/40)</span></span>
                     <input
                       autoFocus
                       value={nameValue}
                       maxLength={40}
-                      placeholder="年表名"
+                      placeholder={t('timeline.name')}
                       onChange={(ev) => onNameChange(ev.target.value)}
                       onBlur={scheduleTagSave}
                       onKeyDown={(ev) => { if (ev.key === 'Escape') closeTagEditor() }}
@@ -1709,15 +1712,26 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             )
           })()}
         </main>
+
+        {/* 設定はサイドバー＋メインを覆うモーダル。背後の操作を遮断（歯車・ログアウトはトップバーで有効）。 */}
+        {showSettings && (
+          <div className="panel-overlay settings-blocker">
+            <SettingsPanel
+              settings={settings}
+              setSettings={setSettings}
+              onClose={() => setShowSettings(false)}
+            />
+          </div>
+        )}
       </div>
 
       {confirmDelete && (
         <div className="modal-overlay" onClick={() => setConfirmDelete(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p>この出来事を削除しますか？</p>
+            <p>{t('event.confirmDelete')}</p>
             <div className="modal-actions">
-              <button onClick={() => setConfirmDelete(false)}>キャンセル</button>
-              <button className="danger" onClick={doDelete}>削除する</button>
+              <button onClick={() => setConfirmDelete(false)}>{t('common.cancel')}</button>
+              <button className="danger" onClick={doDelete}>{t('common.deleteConfirm')}</button>
             </div>
           </div>
         </div>
@@ -1726,10 +1740,10 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       {confirmDeleteTagId != null && (
         <div className="modal-overlay" onClick={() => setConfirmDeleteTagId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <p>この年表を削除しますか？</p>
+            <p>{t('timeline.confirmDelete')}</p>
             <div className="modal-actions">
-              <button onClick={() => setConfirmDeleteTagId(null)}>キャンセル</button>
-              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>削除する</button>
+              <button onClick={() => setConfirmDeleteTagId(null)}>{t('common.cancel')}</button>
+              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>{t('common.deleteConfirm')}</button>
             </div>
           </div>
         </div>

@@ -20,7 +20,7 @@
 .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 /* ---- 本体 2カラム ---- */
-.body { display: flex; flex: 1; min-height: 0; }
+.body { display: flex; flex: 1; min-height: 0; position: relative; }
 
 .list {
   width: 320px; flex-shrink: 0;
@@ -51,6 +51,8 @@
   position: absolute; inset: 0; z-index: 20;
   display: flex; align-items: flex-start; justify-content: flex-start; padding: 16px;
 }
+/* 設定オーバーレイ: body 全体（サイドバー＋メイン）を覆い、背後の操作を遮断する */
+.settings-blocker { z-index: 40; background: rgba(0,0,0,0.08); }
 .placeholder { margin: auto; text-align: center; color: var(--muted); max-width: 320px; line-height: 1.7; }
 .placeholder svg { color: var(--border); margin-bottom: 12px; }
 
