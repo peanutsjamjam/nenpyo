@@ -699,12 +699,14 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
+function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
   selected: boolean
   onSelectStrip: () => void
+  mine: boolean
+  onToggleFollow: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(0)
@@ -753,6 +755,15 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
         <span className="strip-tag">{tag.name}</span>
         <span className="strip-user">{tag.username}</span>
         <span className="strip-count">{events.length}件</span>
+        {!mine && (
+          <button
+            className={'strip-follow' + (tag.followed ? ' on' : '')}
+            onClick={(e) => { e.stopPropagation(); onToggleFollow() }}
+            title={tag.followed ? 'フォローを解除' : 'この年表をフォローする'}
+          >
+            {tag.followed ? 'フォロー中' : '＋ フォロー'}
+          </button>
+        )}
       </div>
       <div className="chart-head">
         <div className="chart-axis">
@@ -796,7 +807,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
 }
 
 // ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
-function Explorer({ onClose }: { onClose: () => void }) {
+function Explorer({ onClose, username, onFollowChange }: { onClose: () => void; username: string; onFollowChange?: () => void }) {
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
   const [error, setError] = useState('')
   // 選択中イベント（下バーに詳細を表示）。所有者・タグ情報も併せて保持する。
@@ -808,6 +819,17 @@ function Explorer({ onClose }: { onClose: () => void }) {
       .then(setStrips)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
+
+  // フォロー/解除して、帯の followed 状態を更新。本画面側にも反映を通知。
+  const toggleFollow = async (s: ExploreTag) => {
+    try {
+      if (s.followed) await api.unfollow(s.tag_id); else await api.follow(s.tag_id)
+      setStrips((prev) => prev && prev.map((x) => x.tag_id === s.tag_id ? { ...x, followed: !x.followed } : x))
+      onFollowChange?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   return (
     <div className="explorer">
@@ -830,6 +852,8 @@ function Explorer({ onClose }: { onClose: () => void }) {
               onSelect={(ev) => setSel({ ev, username: s.username, tagName: s.name, color: s.color })}
               selected={selStripId === s.tag_id}
               onSelectStrip={() => setSelStripId(s.tag_id)}
+              mine={s.username === username}
+              onToggleFollow={() => toggleFollow(s)}
             />
           ))}
         </div>
@@ -1346,7 +1370,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
         <main className="editor">
           {showExplorer ? (
-              <Explorer onClose={() => setShowExplorer(false)} />
+              <Explorer onClose={() => setShowExplorer(false)} username={username} />
             ) : events.length > 0 ? (
               <TimelineChart
                 events={chartEvents}

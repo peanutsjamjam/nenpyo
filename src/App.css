@@ -69,6 +69,13 @@
 .strip-tag { font-weight: 700; color: var(--text); }
 .strip-user { font-size: 12px; color: var(--muted); }
 .strip-count { margin-left: auto; font-size: 12px; color: var(--muted); }
+/* エクスプローラー: 年表のフォロー/解除ボタン */
+.strip-follow {
+  flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer;
+}
+.strip-follow:hover { background: var(--accent-soft); }
+.strip-follow.on { background: var(--accent); color: #fff; }
 .strip-body { position: relative; overflow-y: auto; overflow-x: hidden; }
 .strip-content { position: relative; min-height: 100%; }
 .strip-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }

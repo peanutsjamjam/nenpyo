@@ -29,6 +29,9 @@ use MIME::Base64 ();
 #   PUT    ?action=tag&id=<id>    {name,color}     -> 年表更新
 #   DELETE ?action=tag&id=<id>                     -> 年表削除
 #   POST   ?action=tags_reorder  {ids:[..]}        -> 年表の並び順を配列順に更新
+#   GET    ?action=follows                         -> フォロー中の年表一覧（所有者名つき）
+#   POST   ?action=follow    {nenpyo_id}           -> 年表をフォロー（自分のは不可）
+#   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除
 
 my $COOKIE_NAME  = 'nenpyo_sid';
 my $COOKIE_PATH  = '/~sugawara/nenpyo/';
@@ -418,7 +421,9 @@ eval {
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
         # 全ユーザーの年表と、それに含まれるイベントを返す（全公開）。
-        require_user($dbh);
+        my $u = require_user($dbh);
+        my %followed = map { $_ => 1 }
+            @{ $dbh->selectcol_arrayref('SELECT nenpyo_id FROM follows WHERE follower_user_id=?', undef, $u->{id}) };
         my $rows = $dbh->selectall_arrayref(
             'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
                     e.id AS event_id, e.start_year, e.start_month, e.start_day,
@@ -437,6 +442,7 @@ eval {
                 push @list, {
                     tag_id => $tid, name => $r->{tag_name},
                     color => $r->{color}, username => $r->{username}, events => [],
+                    followed => $followed{$tid} ? JSON::PP::true : JSON::PP::false,
                 };
                 $idx{$tid} = $#list;
             }
@@ -508,6 +514,43 @@ eval {
         my $id = query_param('id');
         fail('invalid id') unless defined $id && $id =~ /^\d+$/;
         $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'follows' && $method eq 'GET') {
+        # 自分がフォローしている年表（所有者名・色つき）
+        my $u = require_user($dbh);
+        my $rows = $dbh->selectall_arrayref(
+            'SELECT n.id AS nenpyo_id, n.name, n.color, ou.username AS owner
+               FROM follows f
+               JOIN nenpyo n ON n.id = f.nenpyo_id
+               JOIN users ou ON ou.id = n.user_id
+              WHERE f.follower_user_id = ?
+              ORDER BY ou.username, n.sort_order, n.id',
+            { Slice => {} }, $u->{id}
+        );
+        respond([ map { {
+            nenpyo_id => 0 + $_->{nenpyo_id}, name => $_->{name},
+            color => $_->{color}, owner => $_->{owner},
+        } } @$rows ]);
+    }
+    elsif ($action eq 'follow' && $method eq 'POST') {
+        # 年表をフォローする。自分の年表はフォロー不可。
+        my $u   = require_user($dbh);
+        my $nid = read_body_json()->{nenpyo_id};
+        fail('invalid nenpyo_id') unless defined $nid && "$nid" =~ /^\d+$/;
+        $nid = 0 + $nid;
+        my $owner = $dbh->selectrow_array('SELECT user_id FROM nenpyo WHERE id=?', undef, $nid);
+        fail('not found', '404 Not Found') unless defined $owner;
+        fail('自分の年表はフォローできません') if $owner == $u->{id};
+        $dbh->do('INSERT INTO follows (follower_user_id, nenpyo_id) VALUES (?,?) ON CONFLICT DO NOTHING',
+            undef, $u->{id}, $nid);
+        respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'follow' && $method eq 'DELETE') {
+        my $u   = require_user($dbh);
+        my $nid = query_param('nenpyo_id');
+        fail('invalid nenpyo_id') unless defined $nid && $nid =~ /^\d+$/;
+        $dbh->do('DELETE FROM follows WHERE follower_user_id=? AND nenpyo_id=?', undef, $u->{id}, 0 + $nid);
         respond({ ok => JSON::PP::true });
     }
     else {

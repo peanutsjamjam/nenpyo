@@ -54,13 +54,22 @@ export type ExploreEvent = {
   detail: string
 }
 
-// エクスプローラー用: あるユーザーの、あるプライムタグと、それに含まれるイベント群
+// エクスプローラー用: あるユーザーの、ある年表と、それに含まれるイベント群
 export type ExploreTag = {
   tag_id: number
   name: string
   color: string
   username: string
+  followed: boolean   // 自分がフォロー済みか
   events: ExploreEvent[]
+}
+
+// フォロー中の年表（所有者名つき）
+export type FollowedTimeline = {
+  nenpyo_id: number
+  name: string
+  color: string
+  owner: string
 }
 
 const API = `${import.meta.env.BASE_URL}api.cgi`
@@ -99,8 +108,12 @@ export const api = {
   updateTag: (id: number, t: TagInput) => call<Tag>('PUT', 'tag', { id, body: t }),
   deleteTag: (id: number) => call<{ ok: true }>('DELETE', 'tag', { id }),
   reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
-  // 全ユーザーのプライムタグ（と各タグのイベント）を取得（エクスプローラー用）
+  // 全ユーザーの年表（と各年表のイベント）を取得（エクスプローラー用）
   explore: () => call<ExploreTag[]>('GET', 'explore'),
+  // フォロー
+  listFollows: () => call<FollowedTimeline[]>('GET', 'follows'),
+  follow: (nenpyoId: number) => call<{ ok: true }>('POST', 'follow', { body: { nenpyo_id: nenpyoId } }),
+  unfollow: (nenpyoId: number) => call<{ ok: true }>('DELETE', `follow&nenpyo_id=${nenpyoId}`),
 }
 
 // 年の AD/BC 表記。BC は数字の後ろ、AD は数字の前。西暦1000年以上は「AD」を付けない。
