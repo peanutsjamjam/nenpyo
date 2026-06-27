@@ -70,3 +70,13 @@ npm run build    # dist/ を更新 = 公開サイトに即反映
 - DB `nenpyo` は作成済み。スキーマは `ddl/` にリレーションごとに置いてある。
   新規構築は依存順に流す: `for f in users sessions events tags event_tags; do psql -d nenpyo -f ddl/$f.sql; done`。
 - CGI は suexec で `sugawara` として動くため、peer 認証でパスワード無し接続できる。
+
+## 開発用シードデータ
+
+複数ユーザーの動作確認用に、テストユーザー `user1` / `user2` / `user3`（各自の Primeタグ＋イベント）を作るスクリプトがある。
+
+```
+/usr/bin/perl ddl/seed_dev.pl    # 再実行すると同名ユーザーを作り直す
+```
+
+パスワードは3人とも `pass1234`（実際にログイン可）。本番データには流さないこと。
