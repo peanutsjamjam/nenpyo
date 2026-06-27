@@ -267,6 +267,16 @@
 }
 .theme-option:hover { border-color: var(--accent); }
 .theme-option.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+/* 言語選択（国旗＋ラベル） */
+.lang-options { display: flex; gap: 10px; }
+.lang-option {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 16px; font-size: 14px; color: var(--text);
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
+}
+.lang-option:hover { border-color: var(--accent); }
+.lang-option.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.lang-flag { width: 28px; height: auto; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
 .settings-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
 .settings-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--text); cursor: pointer; }
 /* 拡大縮小が未割り当てのときの無効表示 */

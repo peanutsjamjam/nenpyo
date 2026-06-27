@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
+import i18n, { type Lang } from './i18n'
 import './App.css'
 
 // 開発用ボタンの表示フラグ。本番で隠す／不要になったら false に（または削除）。
@@ -20,6 +21,7 @@ const WHEEL_ACTION_LABELS: Record<WheelAction, string> = {
 const ZOOM_FACTORS = [1.05, 1.1, 1.2, 1.3, 1.5]
 type AppSettings = {
   theme: Theme
+  lang: Lang
   invertZoom: boolean
   wheelPlain: WheelAction
   wheelShift: WheelAction
@@ -32,6 +34,7 @@ const SETTINGS_KEY = 'nenpyo-settings'
 function loadSettings(): AppSettings {
   const defaults: AppSettings = {
     theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    lang: 'ja',
     invertZoom: false,
     wheelPlain: 'scroll',
     wheelShift: 'pan',
@@ -624,6 +627,27 @@ function SettingsPanel({ settings, setSettings, onClose }: {
       </div>
 
       <section className="settings-section">
+        <h3 className="settings-label">言語 / Language</h3>
+        <div className="settings-section-body">
+        <div className="lang-options">
+          {([
+            { code: 'ja' as Lang, label: '日本語', flag: 'jp.jpg' },
+            { code: 'en' as Lang, label: 'English', flag: 'gb.jpg' },
+          ]).map((l) => (
+            <button
+              key={l.code}
+              className={'lang-option' + (settings.lang === l.code ? ' selected' : '')}
+              onClick={() => setSettings((s) => ({ ...s, lang: l.code }))}
+            >
+              <img className="lang-flag" src={`${import.meta.env.BASE_URL}flags/${l.flag}`} alt="" />
+              <span>{l.label}</span>
+            </button>
+          ))}
+        </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
         <h3 className="settings-label">テーマ</h3>
         <div className="settings-section-body">
         <div className="theme-options">
@@ -1084,6 +1108,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme)
+    document.documentElement.lang = settings.lang
+    if (i18n.language !== settings.lang) i18n.changeLanguage(settings.lang)
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* 無視 */ }
   }, [settings])
 
