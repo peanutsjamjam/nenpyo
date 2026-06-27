@@ -292,6 +292,15 @@ function eventsExtent(events: EventDates[]): { min: number; max: number } | null
 // 改行を空白1つに置き換えて1行化する（下バーの詳細表示用。一覧性を上げる）。
 const oneLine = (s: string) => s.replace(/\r\n|\r|\n/g, ' ')
 
+// 背景色 (#rrggbb) の上で読みやすい文字色（明るい背景は黒、暗い背景は白）。
+function textColorFor(hex: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex)
+  if (!m) return '#fff'
+  const n = parseInt(m[1], 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.6 ? '#1a1a1a' : '#fff'
+}
+
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
 // 単クリック: その行を選択（縁取り表示）するだけ。
@@ -878,6 +887,23 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
+  // メイン領域で非表示にしている年表 id（チェックを外した年表）。localStorage に保存。
+  const HIDDEN_KEY = 'nenpyo-hidden-timelines'
+  const [hiddenTimelines, setHiddenTimelines] = useState<Set<number>>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
+      if (Array.isArray(v)) return new Set(v.filter((x) => typeof x === 'number'))
+    } catch { /* 無視 */ }
+    return new Set()
+  })
+  useEffect(() => {
+    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hiddenTimelines])) } catch { /* 無視 */ }
+  }, [hiddenTimelines])
+  const toggleTimelineVisible = (id: number) => setHiddenTimelines((prev) => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
   // 開発用: メイン領域を可視化するオーバーレイ
   const [devOverlay, setDevOverlay] = useState(false)
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
@@ -943,6 +969,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     ...timelines.flatMap((t) => events.filter((e) => timelineIdOf(e) === t.id)),
     ...events.filter((e) => timelineIdOf(e) == null),
   ]
+  // メイン領域に表示するイベント: チェックを外した（非表示）年表のものを除く（未所属は常に表示）。
+  const chartEvents = listEvents.filter((e) => e.nenpyo_id == null || !hiddenTimelines.has(e.nenpyo_id))
 
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
@@ -1273,8 +1301,14 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                       <button className="tl-toggle" title={open ? '畳む' : '展開する'} onClick={() => toggleTimelineOpen(t.id)}>
                         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
-                      <span className="tag-swatch" style={{ background: t.color }} />
-                      <span className="tag-name">{t.name}</span>
+                      <input
+                        type="checkbox"
+                        className="tl-visible"
+                        checked={!hiddenTimelines.has(t.id)}
+                        onChange={() => toggleTimelineVisible(t.id)}
+                        title="メイン領域に表示する"
+                      />
+                      <span className="tag-name" style={{ background: t.color, color: textColorFor(t.color) }}>{t.name}</span>
                       <span className="tag-count">{tEvents.length}件</span>
                       <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
                       <button className="tag-icon-btn" title="この年表にイベントを追加" onClick={() => { setExpandedTimelines((p) => new Set(p).add(t.id)); startNew(t.id) }}><Plus size={15} /></button>
@@ -1315,7 +1349,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               <Explorer onClose={() => setShowExplorer(false)} />
             ) : events.length > 0 ? (
               <TimelineChart
-                events={listEvents}
+                events={chartEvents}
                 selectedId={chartSelectedId}
                 onSelect={setChartSelectedId}
                 onEdit={selectEvent}
