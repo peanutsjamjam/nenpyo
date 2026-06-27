@@ -90,7 +90,9 @@
 .explorer-note { color: var(--muted); line-height: 1.8; }
 /* プライムイベント表示領域（帯）を縦に並べる */
 .explorer-strips { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px; }
-.strip { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; background: var(--panel); }
+.strip { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; background: var(--panel); cursor: pointer; }
+/* 選択中の年表（帯）はキーカラー（アクセント）で囲む */
+.strip.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .strip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .strip-swatch { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 3px; }
 .strip-tag { font-weight: 700; color: var(--text); }

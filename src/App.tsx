@@ -259,6 +259,9 @@ function eventsExtent(events: EventDates[]): { min: number; max: number } | null
   return isFinite(min) && max > min ? { min, max } : (isFinite(min) ? { min, max: min } : null)
 }
 
+// 改行を空白1つに置き換えて1行化する（下バーの詳細表示用。一覧性を上げる）。
+const oneLine = (s: string) => s.replace(/\r\n|\r|\n/g, ' ')
+
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
 // 中心年(centerYear)と表示幅(yearsVisible)で決まるビューポートに入る項目だけを表示する。
 // 単クリック: その行を選択（縁取り表示）するだけ。
@@ -532,7 +535,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
               <span className="chart-sel-title">{selectedEvent.title || '（無題）'}</span>
               <span className="chart-sel-date">{formatRangeAD(selectedEvent)}</span>
             </div>
-            {selectedEvent.detail && <div className="chart-sel-detail">{selectedEvent.detail}</div>}
+            {selectedEvent.detail && <div className="chart-sel-detail">{oneLine(selectedEvent.detail)}</div>}
           </div>
         ) : (
           <span className="chart-hint-text">イベントを選択すると詳細を表示します</span>
@@ -645,10 +648,12 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、あるプライムタグに含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-function PrimeTagStrip({ tag, selectedId, onSelect }: {
+function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
+  selected: boolean
+  onSelectStrip: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(0)
@@ -662,6 +667,22 @@ function PrimeTagStrip({ tag, selectedId, onSelect }: {
     return () => ro.disconnect()
   }, [])
 
+  // 非選択の帯は、ホイールで帯内をスクロールさせない。スクロールバーは見せたままにし、
+  // ホイール量はエクスプローラー全体（.explorer-strips）のスクロールへ転送する。
+  useEffect(() => {
+    const el = bodyRef.current
+    if (!el || selected) return // 選択中はブラウザ既定（帯内スクロール）に任せる
+    const onWheel = (ev: WheelEvent) => {
+      const scroller = el.closest('.explorer-strips') as HTMLElement | null
+      if (!scroller) return
+      ev.preventDefault()
+      const factor = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? scroller.clientHeight : 1
+      scroller.scrollTop += ev.deltaY * factor
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [selected])
+
   const events = tag.events
   const ext = eventsExtent(events)
   const span = ext ? Math.max(MIN_YEARS, (ext.max - ext.min) || 1) : 200
@@ -672,10 +693,10 @@ function PrimeTagStrip({ tag, selectedId, onSelect }: {
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (w || 800) / 1000))
   const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
-  const rowsVisible = Math.min(Math.max(events.length, 1), 8) // 8行を超えたら帯内を縦スクロール
+  const rowsVisible = Math.min(Math.max(events.length, 1), 5) // 5行を超えたら帯内を縦スクロール
 
   return (
-    <div className="strip">
+    <div className={'strip' + (selected ? ' selected' : '')} onClick={(e) => { e.stopPropagation(); onSelectStrip() }}>
       <div className="strip-head">
         <span className="strip-swatch" style={{ background: tag.color }} />
         <span className="strip-tag">{tag.name}</span>
@@ -729,6 +750,8 @@ function Explorer({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   // 選択中イベント（下バーに詳細を表示）。所有者・タグ情報も併せて保持する。
   const [sel, setSel] = useState<{ ev: ExploreEvent; username: string; tagName: string; color: string } | null>(null)
+  // 選択中の年表（帯）。周囲をキーカラーで囲んで示す。
+  const [selStripId, setSelStripId] = useState<number | null>(null)
   useEffect(() => {
     api.explore()
       .then(setStrips)
@@ -747,13 +770,15 @@ function Explorer({ onClose }: { onClose: () => void }) {
       ) : strips.length === 0 ? (
         <p className="explorer-note">表示できるプライムタグがありません。</p>
       ) : (
-        <div className="explorer-strips">
+        <div className="explorer-strips" onClick={() => setSelStripId(null)}>
           {strips.map((s) => (
             <PrimeTagStrip
               key={s.tag_id}
               tag={s}
               selectedId={sel?.ev.id ?? null}
               onSelect={(ev) => setSel({ ev, username: s.username, tagName: s.name, color: s.color })}
+              selected={selStripId === s.tag_id}
+              onSelectStrip={() => setSelStripId(s.tag_id)}
             />
           ))}
         </div>
@@ -767,7 +792,7 @@ function Explorer({ onClose }: { onClose: () => void }) {
               <span className="chart-sel-date">{formatRangeAD(sel.ev)}</span>
               <span className="chart-sel-meta">{sel.username} / {sel.tagName}</span>
             </div>
-            {sel.ev.detail && <div className="chart-sel-detail">{sel.ev.detail}</div>}
+            {sel.ev.detail && <div className="chart-sel-detail">{oneLine(sel.ev.detail)}</div>}
           </div>
         ) : (
           <span className="chart-hint-text">イベントを選択すると詳細を表示します</span>
