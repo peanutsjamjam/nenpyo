@@ -1079,11 +1079,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     resetForm()
   }
 
-  // イベントが属する年表: 1つだけ選べる。選び直すと差し替え、同じものを再度押すと解除。
-  const selectTimeline = (id: number) => {
-    setFormTagIds((ids) => ids.includes(id) ? [] : [id])
-  }
-
   // 年表編集中に色見本をクリックして色を選んだとき: 色を設定（即時保存）
   const pickTagColor = async (t: Tag, color: string) => {
     try {
@@ -1356,45 +1351,50 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                   <button className="settings-close" onClick={closeEditor} title="閉じる" aria-label="閉じる"><X size={18} /></button>
                 </div>
               </div>
-              <div className="fld">期間
-                <div className="range-row">
-                  <input value={startText} placeholder="yyyy/mm/dd"
-                    onChange={(e) => setStartText(e.target.value)} onBlur={scheduleSave} />
-                  <span className="range-sep">〜</span>
-                  <input value={endText} placeholder="yyyy/mm/dd"
-                    onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
+              {(() => {
+                const tl = timelines.find((t) => formTagIds.includes(t.id))
+                return (
+                  <div className="fld">
+                    <span className="fld-head">年表</span>
+                    <div className="fld-body">
+                      <div className="event-timeline">
+                        {tl ? (<>
+                          <span className="tag-swatch" style={{ background: tl.color }} />
+                          <span className="event-timeline-name">{tl.name}</span>
+                        </>) : (
+                          <span className="hint">（年表に未所属）</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+              <div className="fld">
+                <span className="fld-head">期間</span>
+                <div className="fld-body">
+                  <div className="range-row">
+                    <input value={startText} placeholder="yyyy/mm/dd"
+                      onChange={(e) => setStartText(e.target.value)} onBlur={scheduleSave} />
+                    <span className="range-sep">〜</span>
+                    <input value={endText} placeholder="yyyy/mm/dd"
+                      onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
+                  </div>
                 </div>
               </div>
 
               <label className="fld">
                 <span className="fld-head">タイトル<span className="char-count">({title.length}/100)</span></span>
-                <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
+                <div className="fld-body">
+                  <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
+                </div>
               </label>
 
               <label className="fld grow">
                 <span className="fld-head">詳細<span className="char-count">({detail.length}/1000)</span></span>
-                <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
+                <div className="fld-body">
+                  <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
+                </div>
               </label>
-
-              <div className="fld">年表
-                {timelines.length === 0 ? (
-                  <p className="hint">年表はありません。左の「年表」欄から作成できます。</p>
-                ) : (
-                  <div className="tag-picker">
-                    {timelines.map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        className={'tag-chip' + (formTagIds.includes(t.id) ? ' on' : '')}
-                        onClick={() => { selectTimeline(t.id); scheduleSave() }}
-                      >
-                        <span className="tag-swatch" style={{ background: t.color }} />
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               {error && <div className="form-error">{error}</div>}
             </div>
