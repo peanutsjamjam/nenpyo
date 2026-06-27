@@ -83,6 +83,26 @@
 .placeholder { margin: auto; text-align: center; color: var(--muted); max-width: 320px; line-height: 1.7; }
 .placeholder svg { color: var(--border); margin-bottom: 12px; }
 
+/* エクスプローラー画面（他ユーザーの年表を探す） */
+.explorer { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.explorer-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+.explorer-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
+.explorer-note { color: var(--muted); line-height: 1.8; }
+/* プライムイベント表示領域（帯）を縦に並べる */
+.explorer-strips { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px; }
+.strip { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; background: var(--panel); }
+.strip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.strip-swatch { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 3px; }
+.strip-tag { font-weight: 700; color: var(--text); }
+.strip-user { font-size: 12px; color: var(--muted); }
+.strip-count { margin-left: auto; font-size: 12px; color: var(--muted); }
+.strip-body { position: relative; overflow-y: auto; overflow-x: hidden; }
+.strip-content { position: relative; min-height: 100%; }
+.strip-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+/* エクスプローラー下バー: 選択中イベントの詳細 */
+.explorer-foot { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; min-height: 28px; display: flex; align-items: center; }
+.chart-sel-meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
 /* ---- 期間バー年表（チャート） ---- */
 .chart { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .chart-head {
@@ -105,16 +125,14 @@
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .chart-empty { color: var(--muted); text-align: center; line-height: 1.7; margin-top: 40px; }
-.chart-hint { position: relative; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.chart-hint-text { flex: 1; text-align: center; }
-/* メイン領域の実寸(px)。中央の日付表示を動かさないよう左に重ねて表示 */
-.chart-dims { position: absolute; left: 44px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
-.chart-nav {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; padding: 0; border-radius: 6px;
-  border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
-}
-.chart-nav:hover { background: var(--accent-soft); border-color: var(--accent); }
+.chart-hint { position: relative; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.chart-hint-text { flex: 1; text-align: center; color: var(--muted); }
+/* 下バー: 選択中イベントの詳細表示 */
+.chart-sel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chart-sel-head { display: flex; align-items: baseline; gap: 10px; }
+.chart-sel-title { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-sel-date { flex: 0 0 auto; font-size: 13px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.chart-sel-detail { font-size: 13px; color: var(--muted); line-height: 1.5; white-space: pre-wrap; max-height: 4.5em; overflow-y: auto; }
 
 /* 下部の水平スクロールバー（左右パン用） */
 .chart-hbar { position: relative; height: 12px; margin-top: 8px; background: var(--panel-2); border-radius: 6px; }

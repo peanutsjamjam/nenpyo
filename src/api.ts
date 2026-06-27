@@ -42,6 +42,28 @@ export type TagInput = {
   prime?: boolean
 }
 
+// エクスプローラー用: 1イベント分（自分のものではないので tag_ids 等は不要）
+export type ExploreEvent = {
+  id: number
+  start_year: number
+  start_month: number | null
+  start_day: number | null
+  end_year: number | null
+  end_month: number | null
+  end_day: number | null
+  title: string
+  detail: string
+}
+
+// エクスプローラー用: あるユーザーの、あるプライムタグと、それに含まれるイベント群
+export type ExploreTag = {
+  tag_id: number
+  name: string
+  color: string
+  username: string
+  events: ExploreEvent[]
+}
+
 const API = `${import.meta.env.BASE_URL}api.cgi`
 
 async function call<T>(method: string, action: string, opts: { id?: number; body?: unknown } = {}): Promise<T> {
@@ -78,6 +100,8 @@ export const api = {
   updateTag: (id: number, t: TagInput) => call<Tag>('PUT', 'tag', { id, body: t }),
   deleteTag: (id: number) => call<{ ok: true }>('DELETE', 'tag', { id }),
   reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
+  // 全ユーザーのプライムタグ（と各タグのイベント）を取得（エクスプローラー用）
+  explore: () => call<ExploreTag[]>('GET', 'explore'),
 }
 
 // 年の AD/BC 表記。BC は数字の後ろ、AD は数字の前。西暦1000年以上は「AD」を付けない。

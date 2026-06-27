@@ -445,6 +445,47 @@ eval {
         );
         respond([ map { tag_json($_) } @$rows ]);
     }
+    elsif ($action eq 'explore' && $method eq 'GET') {
+        # 全ユーザーのプライムタグと、それに含まれるイベントを返す（年表は全公開）。
+        require_user($dbh);
+        my $rows = $dbh->selectall_arrayref(
+            'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
+                    e.id AS event_id, e.start_year, e.start_month, e.start_day,
+                    e.end_year, e.end_month, e.end_day, e.title, e.detail
+               FROM tags t
+               JOIN users u ON u.id = t.user_id
+               JOIN event_tags et ON et.tag_id = t.id
+               JOIN events e ON e.id = et.event_id
+              WHERE t.prime
+              ORDER BY u.username, t.sort_order, t.id,
+                       e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
+            { Slice => {} }
+        );
+        my (@list, %idx);
+        for my $r (@$rows) {
+            my $tid = 0 + $r->{tag_id};
+            unless (exists $idx{$tid}) {
+                push @list, {
+                    tag_id => $tid, name => $r->{tag_name},
+                    color => $r->{color}, username => $r->{username}, events => [],
+                };
+                $idx{$tid} = $#list;
+            }
+            next unless defined $r->{event_id};
+            push @{ $list[$idx{$tid}]{events} }, {
+                id          => 0 + $r->{event_id},
+                start_year  => 0 + $r->{start_year},
+                start_month => numornull($r->{start_month}),
+                start_day   => numornull($r->{start_day}),
+                end_year    => numornull($r->{end_year}),
+                end_month   => numornull($r->{end_month}),
+                end_day     => numornull($r->{end_day}),
+                title       => $r->{title},
+                detail      => $r->{detail},
+            };
+        }
+        respond(\@list);
+    }
     elsif ($action eq 'tag' && $method eq 'POST') {
         my $u = require_user($dbh);
         # 新規タグは既定で prime=false（色を持たない）。並び順は末尾（最大+1）。
