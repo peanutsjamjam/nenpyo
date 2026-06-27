@@ -275,7 +275,7 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
       if (p > rangeEnd) break
       if (p >= rangeStart) {
         let topLabel = ''
-        if (d === 1) topLabel = m === 1 ? `${gridYearLabel(y)} 1月` : `${m}月`
+        if (d === 1) topLabel = `${gridYearLabel(y)} ${m}月` // 各月1日に「年 ○月」（毎月、年も付ける）
         gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: `${d}日` })
       }
       d++
