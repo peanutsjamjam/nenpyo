@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
+import { useTranslation } from 'react-i18next'
 import i18n, { type Lang } from './i18n'
 import './App.css'
 
@@ -11,12 +12,7 @@ const DEV_BUTTON = true
 type Theme = 'light' | 'dark'
 // マウスホイール（修飾キー別）に割り当てる動作
 type WheelAction = 'scroll' | 'pan' | 'zoom' | 'none'
-const WHEEL_ACTION_LABELS: Record<WheelAction, string> = {
-  scroll: '上下スクロール',
-  pan: '左右スクロール（パン）',
-  zoom: '拡大縮小',
-  none: 'なし',
-}
+const WHEEL_ACTIONS: WheelAction[] = ['scroll', 'pan', 'zoom', 'none']
 // 拡大縮小の倍率（1ノッチあたり）の選択肢
 const ZOOM_FACTORS = [1.05, 1.1, 1.2, 1.3, 1.5]
 type AppSettings = {
@@ -617,17 +613,18 @@ function SettingsPanel({ settings, setSettings, onClose }: {
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   // どの修飾キーにも「拡大縮小」が割り当てられていなければ、倍率・反転は無効化
   const zoomUsed = settings.wheelPlain === 'zoom' || settings.wheelShift === 'zoom' || settings.wheelCtrl === 'zoom'
   return (
     <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
       <div className="settings-head">
-        <h2 className="settings-title">設定</h2>
-        <button className="settings-close" onClick={onClose}>閉じる</button>
+        <h2 className="settings-title">{t('settings.title')}</h2>
+        <button className="settings-close" onClick={onClose}>{t('settings.close')}</button>
       </div>
 
       <section className="settings-section">
-        <h3 className="settings-label">言語 / Language</h3>
+        <h3 className="settings-label">{t('settings.language')}</h3>
         <div className="settings-section-body">
         <div className="lang-options">
           {([
@@ -648,16 +645,16 @@ function SettingsPanel({ settings, setSettings, onClose }: {
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">テーマ</h3>
+        <h3 className="settings-label">{t('settings.theme')}</h3>
         <div className="settings-section-body">
         <div className="theme-options">
-          {(['light', 'dark'] as Theme[]).map((t) => (
+          {(['light', 'dark'] as Theme[]).map((th) => (
             <button
-              key={t}
-              className={'theme-option' + (settings.theme === t ? ' selected' : '')}
-              onClick={() => setSettings((s) => ({ ...s, theme: t }))}
+              key={th}
+              className={'theme-option' + (settings.theme === th ? ' selected' : '')}
+              onClick={() => setSettings((s) => ({ ...s, theme: th }))}
             >
-              {t === 'light' ? 'ライトモード' : 'ダークモード'}
+              {th === 'light' ? t('settings.light') : t('settings.dark')}
             </button>
           ))}
         </div>
@@ -665,28 +662,28 @@ function SettingsPanel({ settings, setSettings, onClose }: {
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">マウスホイール</h3>
+        <h3 className="settings-label">{t('settings.wheel.section')}</h3>
         <div className="settings-section-body">
         {([
-          ['wheelPlain', 'マウスホイール'],
-          ['wheelShift', 'Shift＋マウスホイール'],
-          ['wheelCtrl', 'Ctrl＋マウスホイール'],
-        ] as [keyof AppSettings, string][]).map(([key, label]) => (
+          ['wheelPlain', 'settings.wheel.plain'],
+          ['wheelShift', 'settings.wheel.shift'],
+          ['wheelCtrl', 'settings.wheel.ctrl'],
+        ] as [keyof AppSettings, string][]).map(([key, labelKey]) => (
           <div className="wheel-row" key={key}>
-            <span className="wheel-row-label">{label}</span>
+            <span className="wheel-row-label">{t(labelKey)}</span>
             <select
               className="wheel-select"
               value={settings[key] as WheelAction}
               onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.value as WheelAction }))}
             >
-              {(Object.keys(WHEEL_ACTION_LABELS) as WheelAction[]).map((a) => (
-                <option key={a} value={a}>{WHEEL_ACTION_LABELS[a]}</option>
+              {WHEEL_ACTIONS.map((a) => (
+                <option key={a} value={a}>{t(`settings.action.${a}`)}</option>
               ))}
             </select>
           </div>
         ))}
         <div className={'wheel-row' + (zoomUsed ? '' : ' disabled')}>
-          <span className="wheel-row-label">拡大縮小の倍率</span>
+          <span className="wheel-row-label">{t('settings.wheel.zoomFactor')}</span>
           <select
             className="wheel-select"
             disabled={!zoomUsed}
@@ -699,7 +696,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
           </select>
         </div>
         <label className={'settings-toggle' + (zoomUsed ? '' : ' disabled')}>
-          <span>拡大・縮小の向きを逆にする</span>
+          <span>{t('settings.wheel.invert')}</span>
           <input
             type="checkbox"
             disabled={!zoomUsed}
@@ -708,16 +705,16 @@ function SettingsPanel({ settings, setSettings, onClose }: {
           />
         </label>
         <p className="settings-note">
-          ホイールを手前に回すと拡大します（チェックで反転）。
+          {t('settings.wheel.note')}
         </p>
         </div>
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">イベントリスト</h3>
+        <h3 className="settings-label">{t('settings.eventList')}</h3>
         <div className="settings-section-body">
           <label className="settings-toggle">
-            <span>クリックしたイベントを画面内に移動させる</span>
+            <span>{t('settings.moveIntoView')}</span>
             <input
               type="checkbox"
               checked={settings.moveClickedIntoView}
@@ -727,7 +724,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
         </div>
       </section>
 
-      <p className="settings-note">テーマ・操作の設定はこのブラウザに保存されます。</p>
+      <p className="settings-note">{t('settings.savedNote')}</p>
     </div>
   )
 }
