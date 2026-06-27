@@ -150,6 +150,9 @@
 .chart-grid { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
 .chart-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
 .chart-grid-line.major { background: var(--muted); }
+/* 現在日時の帯（赤）。幅はその時のスケールでの「1日」ぶん（インラインで指定、最小2px）。
+   バー・タイトルより背面、他の縦線より前面（chart-grid 内の最後に置く）。 */
+.chart-now-line { position: absolute; top: 0; bottom: 0; min-width: 2px; background: #e23b3b; z-index: 1; pointer-events: none; }
 .chart-row { position: relative; z-index: 1; height: 34px; }
 /* 選択は行全体ではなく、実際の期間バーの周囲だけにリング表示する */
 .chart-row.selected .chart-bar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }

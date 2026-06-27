@@ -181,6 +181,7 @@ const MAX_YEARS = 40000               // 表示幅の上限
 const LABEL_FONT_PX = 14              // 期間バー内タイトルの文字サイズ（CSS と一致させる）
 const ROW_PX = 34                    // 1行（期間バー行）の高さ（CSS .chart-row と一致させる）
 const MAX_GRID_LINES_AT_1000PX = 25  // メイン領域の横幅 1000px あたりの縦線の最大本数（幅に比例）
+const NOW_FADE_PX = 24               // 現在帯（赤）がこのpx幅に近づくほど薄くする（小さいほど早く薄くなる）
 
 // 指定された最も細かい単位の幅（日指定=1日、月止まり=1ヶ月、年のみ=1年）
 const unitWidth = (month: number | null, day: number | null) =>
@@ -372,6 +373,17 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
 
+  // 現在日時の帯（赤）。表示範囲内のときだけ引く。幅はその時のスケールでの「1日」ぶん。
+  const now = new Date()
+  const nowPos = fracYear(now.getFullYear(), now.getMonth() + 1, now.getDate())
+  const nowInView = nowPos >= rangeStart && nowPos <= rangeEnd
+  // 帯幅がメイン領域に占める割合（0〜1）。太いほど赤を薄く（透明度を上げる）。
+  const nowWidthFrac = DAY / yearsVisible
+  // 帯の実ピクセル幅から透明度を決める（割合だと極端にズームインするまで効かないため）。
+  // 2px までは濃い赤、NOW_FADE_PX に近づくほど薄く、下限 0.12。
+  const nowPxWidth = nowWidthFrac * (chartW || 1000)
+  const nowAlpha = Math.max(0.3, 1 - Math.max(0, nowPxWidth - 2) / NOW_FADE_PX)
+
   // 画面あたりの最大縦線数。メイン領域の横幅 1000px で 25 本、横幅に比例させる。
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (chartW || 1000) / 1000))
   const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
@@ -466,6 +478,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
                 style={{ left: `${g.left}%` }}
               />
             ))}
+            {nowInView && <div className="chart-now-line" style={{ left: `${pct(nowPos)}%`, width: `${nowWidthFrac * 100}%`, background: `rgba(226, 59, 59, ${nowAlpha})` }} />}
           </div>
           {/* 全イベントを常に1行ずつ表示（並び順固定）。バーが画面外でも行は残し、
               タイトルは近い側の端に寄せて表示する。 */}
