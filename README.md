@@ -35,7 +35,7 @@ PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events / follows)
   1つの出来事は最大1つの年表に属し（`events.nenpyo_id`）、期間バー／一覧ドットの色はその年表の色を使う。
   一覧は `sort_order` 順で、**ユーザーが上下ボタンで並び替え可能**（`tags_reorder`）。
   年表の作成・削除・並び替え・色付けは画面左の「年表」欄（ツリー）で行う。
-- **フォロー**: `follows`（`follower_user_id`, `nenpyo` の `tag_id`）。他ユーザーの年表をフォローする関係。
+- **フォロー**: `follows`（`follower_user_id`, `nenpyo_id`）。他ユーザーの年表をフォローする関係。
 
 ## API（`api.cgi`、`?action=` と HTTP メソッドで分岐）
 
