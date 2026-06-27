@@ -421,7 +421,7 @@ eval {
         respond([ map { tag_json($_) } @$rows ]);
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
-        # 全ユーザーの年表と、それに含まれるイベントを返す（全公開）。
+        # 他ユーザーの年表と、それに含まれるイベントを返す（全公開。自分の年表は除く）。
         my $u = require_user($dbh);
         my %followed = map { $_ => 1 }
             @{ $dbh->selectcol_arrayref('SELECT nenpyo_id FROM follows WHERE follower_user_id=?', undef, $u->{id}) };
@@ -432,9 +432,10 @@ eval {
                FROM nenpyo t
                JOIN users u ON u.id = t.user_id
                JOIN events e ON e.nenpyo_id = t.id
+              WHERE t.user_id <> ?
               ORDER BY u.username, t.sort_order, t.id,
                        e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
-            { Slice => {} }
+            { Slice => {} }, $u->{id}
         );
         my (@list, %idx);
         for my $r (@$rows) {
