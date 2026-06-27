@@ -55,7 +55,9 @@
 .placeholder svg { color: var(--border); margin-bottom: 12px; }
 
 /* エクスプローラー画面（他ユーザーの年表を探す） */
-.explorer { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* 左右はメイン領域の余白いっぱいまで広げる（余白クリックでも帯選択を解除できるように）。
+   見た目は内側パディングで従来どおり。 */
+.explorer { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; margin: 0 -20px; padding: 0 20px; }
 .explorer-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
 .explorer-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
 .explorer-note { color: var(--muted); line-height: 1.8; }
@@ -168,9 +170,14 @@
 .date-row { display: flex; gap: 12px; }
 
 /* 開始 〜 終了 を左右に並べる */
-.range-row { display: flex; align-items: center; gap: 10px; }
-.range-row input { flex: 1; min-width: 0; }
-.range-sep { flex: 0 0 auto; color: var(--muted); font-size: 16px; }
+.range-row { display: flex; align-items: flex-start; gap: 10px; }
+.range-row > input { flex: 1; min-width: 0; }
+.range-sep { flex: 0 0 auto; color: var(--muted); font-size: 16px; margin-top: 8px; }
+/* to 側: 「現在まで継続中」チェックと終了日入力を縦に */
+.range-to { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.range-to input { width: 100%; }
+.ongoing-check { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 400; color: var(--muted); cursor: pointer; letter-spacing: 0; }
+.ongoing-check input { flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 /* フィールドのラベルは設定画面のセクション名と同じ大きさ・濃さに */
 .fld { display: flex; flex-direction: column; gap: 6px; font-size: 17px; color: var(--text); font-weight: 700; letter-spacing: 0.02em; }
 .fld input, .fld textarea { font-weight: 400; }
@@ -184,7 +191,7 @@
 .fld.grow { flex: 1; min-height: 0; }
 /* 見出し行：ラベル左・文字数カウンタ右 */
 .fld-head { display: flex; align-items: baseline; }
-.char-count { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
+.char-count { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 /* 内容部分：設定画面と同じく少しインデントし、左の縦線で範囲を示す */
 .fld-body { margin-left: 8px; padding-left: 16px; border-left: 2px solid var(--border); display: flex; flex-direction: column; }
 .fld-body > input, .fld-body > textarea { width: 100%; }

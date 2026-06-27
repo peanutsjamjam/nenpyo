@@ -12,6 +12,7 @@ export type EventItem = {
   title: string
   detail: string
   nenpyo_id: number | null   // 属する年表（最大1つ）。未所属は null
+  ongoing: boolean           // 開始〜本日まで継続中（このとき end_* は無し）
   created: number
   updated: number
 }
@@ -26,6 +27,7 @@ export type EventInput = {
   title: string
   detail: string
   nenpyo_id: number | null
+  ongoing: boolean
 }
 
 // 年表（旧 tag）。すべて色と並び順を持つ（prime の区別は廃止）。
@@ -52,6 +54,7 @@ export type ExploreEvent = {
   end_day: number | null
   title: string
   detail: string
+  ongoing: boolean
 }
 
 // エクスプローラー用: あるユーザーの、ある年表と、それに含まれるイベント群
@@ -195,12 +198,14 @@ export function dateToText(year: number | null, month: number | null, day: numbe
   return s
 }
 
-// 開始〜終了を AD/BC 表記でまとめて表示。終了が無ければ開始のみ。
+// 開始〜終了を AD/BC 表記でまとめて表示。継続中は「〜継続中」、終了が無ければ開始のみ。
 export function formatRangeAD(e: {
   start_year: number; start_month: number | null; start_day: number | null
   end_year: number | null; end_month: number | null; end_day: number | null
+  ongoing?: boolean
 }): string {
   const start = formatDateAD(e.start_year, e.start_month, e.start_day)
+  if (e.ongoing) return `${start} 〜 継続中`
   if (e.end_year == null) return start
   return `${start} 〜 ${formatDateAD(e.end_year, e.end_month, e.end_day)}`
 }

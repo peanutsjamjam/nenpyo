@@ -17,6 +17,8 @@ CREATE TABLE events (
   title       TEXT NOT NULL DEFAULT '',
   detail      TEXT NOT NULL DEFAULT '',
   nenpyo_id   INTEGER REFERENCES nenpyo(id) ON DELETE SET NULL,
+  -- 真なら「開始〜本日まで継続中」。このとき end_* は使わない（NULL）。
+  ongoing     BOOLEAN NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

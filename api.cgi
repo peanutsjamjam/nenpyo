@@ -232,7 +232,7 @@ sub clean_event {
     return ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail);
 }
 
-my $EVENT_COLS = "id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id,
+my $EVENT_COLS = "id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id, ongoing,
                   extract(epoch FROM created_at)::bigint AS created,
                   extract(epoch FROM updated_at)::bigint AS updated";
 
@@ -246,6 +246,8 @@ sub event_row {
 
 # 数値か undef に整える小ヘルパ
 sub numornull { defined $_[0] ? 0 + $_[0] : undef }
+# PostgreSQL の真偽値（1/0 でも 't'/'f' でも）を JSON 真偽へ。
+sub pgbool { my $v = $_[0]; (defined $v && $v ne '' && $v ne '0' && lc $v ne 'f') ? JSON::PP::true : JSON::PP::false }
 
 # 与えられた値が本人の年表 id なら数値で返す。そうでなければ undef（未所属）。
 sub owned_nenpyo_id {
@@ -269,6 +271,7 @@ sub event_json {
         title       => $r->{title},
         detail      => $r->{detail},
         nenpyo_id   => numornull($r->{nenpyo_id}),
+        ongoing     => pgbool($r->{ongoing}),
         created     => 0 + $r->{created},
         updated     => 0 + $r->{updated},
     };
@@ -381,10 +384,12 @@ eval {
         my $body = read_body_json();
         my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
         my $nid = owned_nenpyo_id($dbh, $u->{id}, $body->{nenpyo_id});
+        my $ongoing = $body->{ongoing} ? 1 : 0;
+        ($ey, $em, $ed) = (undef, undef, undef) if $ongoing; # 継続中なら終了は持たない
         my $id = $dbh->selectrow_array(
-            'INSERT INTO events (user_id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id',
-            undef, $u->{id}, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid
+            'INSERT INTO events (user_id, start_year, start_month, start_day, end_year, end_month, end_day, title, detail, nenpyo_id, ongoing)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id',
+            undef, $u->{id}, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid, $ongoing
         );
         respond(event_json(event_row($dbh, $u->{id}, $id)));
     }
@@ -396,12 +401,14 @@ eval {
         my $body = read_body_json();
         my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
         my $nid = owned_nenpyo_id($dbh, $u->{id}, $body->{nenpyo_id});
+        my $ongoing = $body->{ongoing} ? 1 : 0;
+        ($ey, $em, $ed) = (undef, undef, undef) if $ongoing; # 継続中なら終了は持たない
         $dbh->do(
             'UPDATE events SET start_year=?, start_month=?, start_day=?,
                                end_year=?, end_month=?, end_day=?,
-                               title=?, detail=?, nenpyo_id=?, updated_at=now()
+                               title=?, detail=?, nenpyo_id=?, ongoing=?, updated_at=now()
               WHERE id=? AND user_id=?',
-            undef, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid, $id, $u->{id}
+            undef, $sy, $sm, $sd, $ey, $em, $ed, $title, $detail, $nid, $ongoing, $id, $u->{id}
         );
         respond(event_json(event_row($dbh, $u->{id}, $id)));
     }
@@ -428,7 +435,7 @@ eval {
         my $rows = $dbh->selectall_arrayref(
             'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
                     e.id AS event_id, e.start_year, e.start_month, e.start_day,
-                    e.end_year, e.end_month, e.end_day, e.title, e.detail
+                    e.end_year, e.end_month, e.end_day, e.title, e.detail, e.ongoing
                FROM nenpyo t
                JOIN users u ON u.id = t.user_id
                JOIN events e ON e.nenpyo_id = t.id
@@ -459,6 +466,7 @@ eval {
                 end_day     => numornull($r->{end_day}),
                 title       => $r->{title},
                 detail      => $r->{detail},
+                ongoing     => pgbool($r->{ongoing}),
             };
         }
         respond(\@list);

@@ -208,10 +208,17 @@ function unitWidth(year: number, month: number | null, day: number | null): numb
 type EventDates = {
   start_year: number; start_month: number | null; start_day: number | null
   end_year: number | null; end_month: number | null; end_day: number | null
+  ongoing?: boolean
 }
 // バーの占有区間 [s, end)。終了は「その単位の終わり＝次の単位の頭」まで広げる。
+// 継続中(ongoing)は本日の終わりまで伸ばす。
 function eventSpan(e: EventDates): { s: number; end: number } {
   const s = fracYear(e.start_year, e.start_month, e.start_day)
+  if (e.ongoing) {
+    const now = new Date()
+    const todayEnd = fracYear(now.getFullYear(), now.getMonth() + 1, now.getDate()) + DAY
+    return { s, end: Math.max(s + DAY, todayEnd) }
+  }
   const end = e.end_year == null
     ? s + unitWidth(e.start_year, e.start_month, e.start_day)
     : fracYear(e.end_year, e.end_month, e.end_day) + unitWidth(e.end_year, e.end_month, e.end_day)
@@ -699,7 +706,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow }: {
+function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
@@ -707,9 +714,18 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   onSelectStrip: () => void
   mine: boolean
   onToggleFollow: () => void
+  wheelPlain: WheelAction
+  wheelShift: WheelAction
+  wheelCtrl: WheelAction
+  zoomFactor: number
+  invertZoom: boolean
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(0)
+  // 選択中だけ操作できる表示ビュー（パン・ズーム）。null のときはイベントにフィット。
+  const [view, setView] = useState<{ center: number; yearsVisible: number } | null>(null)
+  const viewRef = useRef({ center: 0, yearsVisible: 0 })
+
   useEffect(() => {
     const el = bodyRef.current
     if (!el) return
@@ -720,27 +736,57 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
     return () => ro.disconnect()
   }, [])
 
-  // 非選択の帯は、ホイールで帯内をスクロールさせない。スクロールバーは見せたままにし、
-  // ホイール量はエクスプローラー全体（.explorer-strips）のスクロールへ転送する。
+  // 選択が外れたらフィット表示に戻す。
+  useEffect(() => { if (!selected) setView(null) }, [selected])
+
+  // ホイール: 非選択はエクスプローラー全体のスクロールへ転送、選択中は設定の割り当て
+  // （メイン画面と同じ：plain/Shift/Ctrl にスクロール/パン/拡大縮小を割り当て）に従う。
   useEffect(() => {
     const el = bodyRef.current
-    if (!el || selected) return // 選択中はブラウザ既定（帯内スクロール）に任せる
+    if (!el) return
     const onWheel = (ev: WheelEvent) => {
-      const scroller = el.closest('.explorer-strips') as HTMLElement | null
-      if (!scroller) return
+      if (!selected) {
+        const scroller = el.closest('.explorer-strips') as HTMLElement | null
+        if (!scroller) return
+        ev.preventDefault()
+        const factor = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? scroller.clientHeight : 1
+        scroller.scrollTop += ev.deltaY * factor
+        return
+      }
+      const action = ev.ctrlKey ? wheelCtrl : ev.shiftKey ? wheelShift : wheelPlain
+      if (action !== 'pan' && action !== 'zoom') return // scroll/none はブラウザ既定に任せる
       ev.preventDefault()
-      const factor = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? scroller.clientHeight : 1
-      scroller.scrollTop += ev.deltaY * factor
+      const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX
+      if (delta === 0) return
+      const { center: cy, yearsVisible: yv } = viewRef.current
+      if (action === 'zoom') {
+        const zoomOut = invertZoom ? delta < 0 : delta > 0
+        const f = zoomOut ? zoomFactor : 1 / zoomFactor
+        const newYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, yv * f))
+        const rect = el.getBoundingClientRect()
+        const wpx = el.clientWidth
+        const frac = wpx > 0 ? Math.min(Math.max((ev.clientX - rect.left) / wpx, 0), 1) : 0.5
+        const cursorPos = (cy - yv / 2) + frac * yv
+        setView({ center: cursorPos - frac * newYV + newYV / 2, yearsVisible: newYV })
+      } else {
+        setView({ center: cy + (delta > 0 ? 1 : -1) * yv / 10, yearsVisible: yv })
+      }
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [selected])
+  }, [selected, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom])
 
   const events = tag.events
+  // イベント群にフィットする既定ビュー
   const ext = eventsExtent(events)
-  const span = ext ? Math.max(MIN_YEARS, (ext.max - ext.min) || 1) : 200
-  const yearsVisible = Math.min(MAX_YEARS, Math.max(MIN_YEARS, span * 1.2)) // 左右に約1割の余白
-  const center = ext ? (ext.min + ext.max) / 2 : fracYear(1, 1, 1)
+  const fitSpan = ext ? Math.max(MIN_YEARS, (ext.max - ext.min) || 1) : 200
+  const fitYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, fitSpan * 1.2)) // 左右に約1割の余白
+  const fitCenter = ext ? (ext.min + ext.max) / 2 : fracYear(1, 1, 1)
+  // 実際に使う表示ビュー（操作中は view、未操作はフィット）
+  const yearsVisible = view ? view.yearsVisible : fitYV
+  const center = view ? view.center : fitCenter
+  viewRef.current = { center, yearsVisible }
+
   const rangeStart = center - yearsVisible / 2
   const rangeEnd = center + yearsVisible / 2
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
@@ -794,8 +840,8 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
             return (
               <div className={'chart-row' + (e.id === selectedId ? ' selected' : '')} key={e.id}>
                 <div className="chart-track">
-                  <div className="chart-bar" style={{ left: `${left}%`, width: `${width}%`, background: tag.color }} title={tip} onClick={() => onSelect(e)} />
-                  <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={() => onSelect(e)}>{title}</span>
+                  <div className="chart-bar" style={{ left: `${left}%`, width: `${width}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
+                  <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
                 </div>
               </div>
             )
@@ -807,7 +853,16 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
 }
 
 // ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
-function Explorer({ onClose, username, onFollowChange }: { onClose: () => void; username: string; onFollowChange?: () => void }) {
+function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom }: {
+  onClose: () => void
+  username: string
+  onFollowChange?: () => void
+  wheelPlain: WheelAction
+  wheelShift: WheelAction
+  wheelCtrl: WheelAction
+  zoomFactor: number
+  invertZoom: boolean
+}) {
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
   const [error, setError] = useState('')
   // 選択中イベント（下バーに詳細を表示）。所有者・タグ情報も併せて保持する。
@@ -832,7 +887,8 @@ function Explorer({ onClose, username, onFollowChange }: { onClose: () => void; 
   }
 
   return (
-    <div className="explorer">
+    // 帯以外（タイトル・余白など）をクリックしたら年表の選択を解除する。
+    <div className="explorer" onClick={() => setSelStripId(null)}>
       <div className="explorer-head">
         <h2 className="explorer-title"><Compass size={20} /> エクスプローラー</h2>
         <button className="settings-close" onClick={onClose} title="閉じる" aria-label="閉じる"><X size={18} /></button>
@@ -843,7 +899,7 @@ function Explorer({ onClose, username, onFollowChange }: { onClose: () => void; 
       ) : strips.length === 0 ? (
         <p className="explorer-note">表示できる年表がありません。</p>
       ) : (
-        <div className="explorer-strips" onClick={() => setSelStripId(null)}>
+        <div className="explorer-strips">
           {strips.map((s) => (
             <PrimeTagStrip
               key={s.tag_id}
@@ -854,6 +910,11 @@ function Explorer({ onClose, username, onFollowChange }: { onClose: () => void; 
               onSelectStrip={() => setSelStripId(s.tag_id)}
               mine={s.username === username}
               onToggleFollow={() => toggleFollow(s)}
+              wheelPlain={wheelPlain}
+              wheelShift={wheelShift}
+              wheelCtrl={wheelCtrl}
+              zoomFactor={zoomFactor}
+              invertZoom={invertZoom}
             />
           ))}
         </div>
@@ -888,6 +949,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   // 開始・終了は1つのテキストとして編集し、保存時に年月日へ解析する
   const [startText, setStartText] = useState('')
   const [endText, setEndText] = useState('')
+  // 「現在まで継続中」チェック（UIのみ。API/DB への保存は未対応）
+  const [ongoing, setOngoing] = useState(false)
   const [title, setTitle] = useState('')
   const [detail, setDetail] = useState('')
   const [isNew, setIsNew] = useState(false)
@@ -1019,7 +1082,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }, [settings])
 
   const resetForm = (s = '', e = '', t = '', d = '') => {
-    setStartText(s); setEndText(e); setTitle(t); setDetail(d)
+    setStartText(s); setEndText(e); setTitle(t); setDetail(d); setOngoing(false)
   }
 
   const reload = useCallback(async () => {
@@ -1079,7 +1142,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       input = {
         start_year: start.year, start_month: start.month, start_day: start.day,
         end_year: end.year, end_month: end.month, end_day: end.day,
-        title, detail, nenpyo_id: formNenpyoId,
+        title, detail, nenpyo_id: formNenpyoId, ongoing,
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1104,7 +1167,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     } finally {
       savingRef.current = false
     }
-  }, [startText, endText, title, detail, formNenpyoId, isNew, selectedId, reload, scheduleSave])
+  }, [startText, endText, title, detail, formNenpyoId, ongoing, isNew, selectedId, reload, scheduleSave])
 
   useEffect(() => { autoSaveRef.current = autoSave }, [autoSave])
 
@@ -1135,6 +1198,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       dateToText(e.end_year, e.end_month, e.end_day),
       e.title, e.detail,
     )
+    setOngoing(e.ongoing)
   }
 
   // 新規イベント追加。年表 id を渡すと、その年表に属する状態で開く。
@@ -1443,7 +1507,16 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
 
         <main className="editor">
           {showExplorer ? (
-              <Explorer onClose={() => setShowExplorer(false)} username={username} onFollowChange={reloadFollows} />
+              <Explorer
+                onClose={() => setShowExplorer(false)}
+                username={username}
+                onFollowChange={reloadFollows}
+                wheelPlain={settings.wheelPlain}
+                wheelShift={settings.wheelShift}
+                wheelCtrl={settings.wheelCtrl}
+                zoomFactor={settings.zoomFactor}
+                invertZoom={settings.invertZoom}
+              />
             ) : (events.length > 0 || followedEvents.length > 0) ? (
               <TimelineChart
                 events={chartEvents}
@@ -1507,23 +1580,33 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                     <input value={startText} placeholder="yyyy/mm/dd"
                       onChange={(e) => setStartText(e.target.value)} onBlur={scheduleSave} />
                     <span className="range-sep">〜</span>
-                    <input value={endText} placeholder="yyyy/mm/dd"
-                      onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
+                    <div className="range-to">
+                      <input value={ongoing ? '' : endText} disabled={ongoing}
+                        placeholder={ongoing ? '現在まで継続中' : 'yyyy/mm/dd'}
+                        onChange={(e) => setEndText(e.target.value)} onBlur={scheduleSave} />
+                      <label className="ongoing-check">
+                        <input type="checkbox" checked={ongoing}
+                          onChange={(e) => { const c = e.target.checked; setOngoing(c); if (c) setEndText(''); scheduleSave() }} />
+                        現在まで継続中
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <label className="fld">
-                <span className="fld-head">タイトル<span className="char-count">({title.length}/100)</span></span>
+                <span className="fld-head">タイトル</span>
                 <div className="fld-body">
                   <input value={title} maxLength={100} placeholder="出来事の名前" onChange={(e) => setTitle(e.target.value)} onBlur={scheduleSave} />
+                  <span className="char-count">({title.length}/100)</span>
                 </div>
               </label>
 
               <label className="fld grow">
-                <span className="fld-head">詳細<span className="char-count">({detail.length}/1000)</span></span>
+                <span className="fld-head">詳細</span>
                 <div className="fld-body">
                   <textarea value={detail} maxLength={1000} placeholder="説明（任意）" onChange={(e) => setDetail(e.target.value)} onBlur={scheduleSave} />
+                  <span className="char-count">({detail.length}/1000)</span>
                 </div>
               </label>
 
