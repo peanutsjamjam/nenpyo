@@ -1281,8 +1281,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                       <span className="tag-swatch" style={{ background: t.color }} />
                       <span className="tag-name">{t.name}</span>
                       <span className="tag-count">{tEvents.length}件</span>
-                      <button className="tag-icon-btn" title="この年表にイベントを追加" onClick={() => { setExpandedTimelines((p) => new Set(p).add(t.id)); startNew(t.id) }}><Plus size={15} /></button>
                       <button className="tag-icon-btn" title="年表を編集" onClick={() => startEditTag(t)}><Pencil size={15} /></button>
+                      <button className="tag-icon-btn" title="この年表にイベントを追加" onClick={() => { setExpandedTimelines((p) => new Set(p).add(t.id)); startNew(t.id) }}><Plus size={15} /></button>
                     </div>
                     {open && tEvents.length > 0 && (
                       <ul className="timeline-events">
