@@ -622,7 +622,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
     <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
       <div className="settings-head">
         <h2 className="settings-title">{t('settings.title')}</h2>
-        <button className="settings-close" onClick={onClose}>{t('settings.close')}</button>
+        <button className="settings-close" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
       </div>
 
       <section className="settings-section">

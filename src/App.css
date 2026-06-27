@@ -13,11 +13,12 @@
 .who { color: var(--muted); font-size: 14px; }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid var(--border); border-radius: 8px;
-  width: 34px; height: 34px; color: var(--text);
+  background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px;
+  width: 34px; height: 34px; color: var(--accent); cursor: pointer;
 }
-.icon-btn:hover { background: var(--panel-2); }
-.icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.icon-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.icon-btn.active { color: #fff; border-color: var(--accent); background: var(--accent); }
+.icon-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- 本体 2カラム ---- */
 .body { display: flex; flex: 1; min-height: 0; position: relative; }
@@ -249,10 +250,12 @@
 }
 .settings-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); }
 .settings-close {
-  padding: 6px 14px; font-size: 14px; color: var(--text);
-  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 14px; font-size: 14px; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
 }
-.settings-close:hover { background: var(--panel-2); }
+.settings-close:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.settings-close:disabled { opacity: 0.4; cursor: default; }
 .settings-section { margin-bottom: 28px; }
 /* セクション見出し（少し大きめ・濃色） */
 .settings-label {
@@ -307,9 +310,9 @@
 .list-add-btn, .tag-icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
-  border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
+  border: 1px solid var(--border); background: var(--input-bg); color: var(--text); cursor: pointer;
 }
-.list-add-btn:hover, .tag-icon-btn:not(:disabled):hover { color: var(--text); border-color: var(--accent); }
+.list-add-btn:hover, .tag-icon-btn:not(:disabled):hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .tag-icon-btn:disabled { opacity: 0.3; cursor: default; }
 
 /* 左サイドバー: 各エリア（イベント/Primeタグ/タグ）。高さは flex-grow 比で配分し、
@@ -324,9 +327,6 @@
 .tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
 .tag-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; }
 .tag-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
-/* 編集（鉛筆）アイコンは項目に hover するまで隠す（イベントリストと同様） */
-.tag-item .tag-icon-btn { opacity: 0; }
-.tag-item:hover .tag-icon-btn { opacity: 1; }
 .tag-swatch { flex-shrink: 0; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); }
 /* 色を持たない（prime でない）タグの見本: 中身なしの四角 */
 .tag-swatch.none { background: transparent; border: 1px dashed var(--muted); }
@@ -361,9 +361,6 @@
 .tl-sub-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .tl-sub-date { font-size: 11px; font-weight: 700; color: var(--accent); }
 .tl-sub-title { font-size: 16px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 葉イベントの編集（鉛筆）アイコンは hover まで隠す */
-.tl-sub .tag-icon-btn { opacity: 0; }
-.tl-sub:hover .tag-icon-btn { opacity: 1; }
 /* タグ編集画面の色選び: 背景色で現在色を示す、クリックしやすい大きめのボタン */
 .color-pick {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
