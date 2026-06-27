@@ -64,6 +64,7 @@ export default function App() {
 
 // ---- ログイン / 新規登録 ----------------------------------------------------
 function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -83,7 +84,7 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
     e.preventDefault()
     setError('')
     if (mode === 'register' && password !== password2) {
-      setError('パスワードが一致しません')
+      setError(t('auth.passwordMismatch'))
       return
     }
     setBusy(true)
@@ -102,21 +103,21 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-logo"><ScrollText size={28} /> <span>nenpyo</span></div>
-        <p className="auth-sub">自分だけの歴史年表をつくろう</p>
+        <p className="auth-sub">{t('auth.tagline')}</p>
 
         <div className="auth-tabs">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>ログイン</button>
-          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>新規登録</button>
+          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>{t('auth.login')}</button>
+          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>{t('auth.register')}</button>
         </div>
 
-        <label>ユーザー名
+        <label>{t('auth.username')}
           <input ref={usernameRef} value={username} maxLength={50} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
         </label>
-        <label>パスワード
+        <label>{t('auth.password')}
           <input type="password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
         </label>
         {mode === 'register' && (
-          <label>パスワード（確認）
+          <label>{t('auth.passwordConfirm')}
             <input type="password" value={password2} maxLength={128} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
           </label>
         )}
@@ -124,7 +125,7 @@ function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
         {error && <div className="auth-error">{error}</div>}
 
         <button type="submit" className="auth-submit" disabled={busy}>
-          {busy ? '…' : mode === 'login' ? 'ログイン' : '登録してはじめる'}
+          {busy ? '…' : mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
         </button>
       </form>
     </div>
@@ -748,6 +749,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   zoomFactor: number
   invertZoom: boolean
 }) {
+  const { t } = useTranslation()
   const bodyRef = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(0)
   // 選択中だけ操作できる表示ビュー（パン・ズーム）。null のときはイベントにフィット。
@@ -828,14 +830,14 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
         <span className="strip-swatch" style={{ background: tag.color }} />
         <span className="strip-tag">{tag.name}</span>
         <span className="strip-user">{tag.username}</span>
-        <span className="strip-count">{events.length}件</span>
+        <span className="strip-count">{t('common.itemCount', { n: events.length })}</span>
         {!mine && (
           <button
             className={'strip-follow' + (tag.followed ? ' on' : '')}
             onClick={(e) => { e.stopPropagation(); onToggleFollow() }}
-            title={tag.followed ? 'フォローを解除' : 'この年表をフォローする'}
+            title={tag.followed ? t('explorer.unfollowTip') : t('explorer.followTip')}
           >
-            {tag.followed ? 'フォロー中' : '＋ フォロー'}
+            {tag.followed ? t('explorer.following') : t('explorer.follow')}
           </button>
         )}
       </div>
@@ -857,14 +859,14 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
             ))}
           </div>
           {events.length === 0 ? (
-            <p className="strip-empty">イベントなし</p>
+            <p className="strip-empty">{t('explorer.noEvents')}</p>
           ) : events.map((e) => {
             const { s, end } = eventSpan(e)
             const left = pct(s)
             const right = pct(end)
             const barLeft = Math.max(left, -BAR_CLAMP)
             const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
-            const title = e.title || '（無題）'
+            const title = e.title || t('common.untitled')
             const tip = `${title}（${formatRangeAD(e)}）`
             return (
               <div className={'chart-row' + (e.id === selectedId ? ' selected' : '')} key={e.id}>
@@ -892,6 +894,7 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
   zoomFactor: number
   invertZoom: boolean
 }) {
+  const { t } = useTranslation()
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
   const [error, setError] = useState('')
   // 選択中イベント（下バーに詳細を表示）。所有者・タグ情報も併せて保持する。
@@ -919,14 +922,14 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
     // 帯以外（タイトル・余白など）をクリックしたら年表の選択を解除する。
     <div className="explorer" onClick={() => setSelStripId(null)}>
       <div className="explorer-head">
-        <h2 className="explorer-title"><Compass size={20} /> エクスプローラー</h2>
-        <button className="settings-close" onClick={onClose} title="閉じる" aria-label="閉じる"><X size={18} /></button>
+        <h2 className="explorer-title"><Compass size={20} /> {t('explorer.title')}</h2>
+        <button className="settings-close" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
       </div>
       {error && <div className="form-error">{error}</div>}
       {strips == null ? (
-        <p className="explorer-note">読み込み中…</p>
+        <p className="explorer-note">{t('common.loading')}</p>
       ) : strips.length === 0 ? (
-        <p className="explorer-note">表示できる年表がありません。</p>
+        <p className="explorer-note">{t('explorer.empty')}</p>
       ) : (
         <div className="explorer-strips">
           {strips.map((s) => (
@@ -953,14 +956,14 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
           <div className="chart-sel">
             <div className="chart-sel-head">
               <span className="strip-swatch" style={{ background: sel.color }} />
-              <span className="chart-sel-title">{sel.ev.title || '（無題）'}</span>
+              <span className="chart-sel-title">{sel.ev.title || t('common.untitled')}</span>
               <span className="chart-sel-date">{formatRangeAD(sel.ev)}</span>
               <span className="chart-sel-meta">{sel.username} / {sel.tagName}</span>
             </div>
             {sel.ev.detail && <div className="chart-sel-detail">{oneLine(sel.ev.detail)}</div>}
           </div>
         ) : (
-          <span className="chart-hint-text">イベントを選択すると詳細を表示します</span>
+          <span className="chart-hint-text">{t('chart.selectHint')}</span>
         )}
       </div>
     </div>

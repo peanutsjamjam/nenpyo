@@ -89,6 +89,26 @@ const resources = {
       chart: {
         selectHint: 'イベントを選択すると詳細を表示します',
       },
+      explorer: {
+        title: 'エクスプローラー',
+        empty: '表示できる年表がありません。',
+        noEvents: 'イベントなし',
+        follow: '＋ フォロー',
+        following: 'フォロー中',
+        followTip: 'この年表をフォローする',
+        unfollowTip: 'フォローを解除',
+      },
+      auth: {
+        tagline: '自分だけの歴史年表をつくろう',
+        login: 'ログイン',
+        register: '新規登録',
+        username: 'ユーザー名',
+        password: 'パスワード',
+        passwordConfirm: 'パスワード（確認）',
+        passwordMismatch: 'パスワードが一致しません',
+        submitLogin: 'ログイン',
+        submitRegister: '登録してはじめる',
+      },
     },
   },
   en: {
@@ -173,15 +193,52 @@ const resources = {
       chart: {
         selectHint: 'Select an event to see details',
       },
+      explorer: {
+        title: 'Explorer',
+        empty: 'No timelines to show.',
+        noEvents: 'No events',
+        follow: '+ Follow',
+        following: 'Following',
+        followTip: 'Follow this timeline',
+        unfollowTip: 'Unfollow',
+      },
+      auth: {
+        tagline: 'Build your own history timeline',
+        login: 'Log in',
+        register: 'Sign up',
+        username: 'Username',
+        password: 'Password',
+        passwordConfirm: 'Password (confirm)',
+        passwordMismatch: 'Passwords do not match',
+        submitLogin: 'Log in',
+        submitRegister: 'Sign up and start',
+      },
     },
   },
 }
 
+// 起動時の言語は保存済み設定（nenpyo-settings.lang）から決める。
+// ログイン前（AuthView）でも保存した言語で表示されるようにするため。
+function initialLang(): Lang {
+  try {
+    const raw = localStorage.getItem('nenpyo-settings')
+    if (raw) {
+      const v = JSON.parse(raw)
+      if (v && (LANGUAGES as readonly string[]).includes(v.lang)) return v.lang as Lang
+    }
+  } catch { /* 壊れていたら既定 */ }
+  return 'ja'
+}
+
+const startLang = initialLang()
+
 i18n.use(initReactI18next).init({
   resources,
-  lng: 'ja',
+  lng: startLang,
   fallbackLng: 'ja',
   interpolation: { escapeValue: false }, // React が自前でエスケープするため不要
 })
+
+if (typeof document !== 'undefined') document.documentElement.lang = startLang
 
 export default i18n
