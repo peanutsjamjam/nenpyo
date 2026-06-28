@@ -230,6 +230,23 @@ function eventSpan(e: EventDates): { s: number; end: number } {
 }
 
 type GridLine = { left: number; major: boolean; topLabel: string; bottomLabel: string }
+// 世紀マーク（最上段）。世紀バンドの開始位置に置く。
+type CenturyMark = { left: number; label: string }
+// 表示範囲に入る世紀バンド（pos=100×k 区切り）の開始位置とラベルを返す。
+// k>=0 は AD 世紀(k+1)、k<0 は BC 世紀(-k)。先頭バンドは左端に貼り付ける。
+// 世紀が多すぎる（ズームアウト時）は出さない。
+function buildCenturyMarks(rangeStart: number, rangeEnd: number, yearsVisible: number): CenturyMark[] {
+  const kFirst = Math.floor(rangeStart / 100)
+  const kLast = Math.floor(rangeEnd / 100)
+  if (kLast - kFirst > 40) return []
+  const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
+  const marks: CenturyMark[] = []
+  for (let k = kFirst; k <= kLast; k++) {
+    const label = k >= 0 ? i18n.t('axis.century', { n: k + 1 }) : i18n.t('axis.centuryBC', { n: -k })
+    marks.push({ left: Math.max(0, pct(100 * k)), label }) // 開始が左端より手前なら 0% に貼り付け
+  }
+  return marks
+}
 // 上バー（グリッド線）の本数・ラベルを、表示範囲から計算する。
 // 線が maxGridLines 以内に収まる最も細かい刻みを選び、年/月/日のラベルを付ける。
 function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: number, maxGridLines: number): GridLine[] {
@@ -463,6 +480,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   // 画面あたりの最大縦線数。メイン領域の横幅 1000px で 25 本、横幅に比例させる。
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (chartW || 1000) / 1000))
   const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
+  const centuryMarks = buildCenturyMarks(rangeStart, rangeEnd, yearsVisible)
 
   // 下部の水平スクロールバー: 全イベントの範囲内を左右にパンする。
   let contentMin = Infinity
@@ -523,6 +541,9 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     <div className="chart">
       <div className="chart-head">
         <div className="chart-axis">
+          {centuryMarks.map((c, i) => (
+            <span key={'c' + i} className="axis-century" style={{ left: `${c.left}%` }}>{c.label}</span>
+          ))}
           {gridLines.map((g, i) => (
             <span
               key={i}
@@ -853,6 +874,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (w || 800) / 1000))
   const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
+  const centuryMarks = buildCenturyMarks(rangeStart, rangeEnd, yearsVisible)
   // レーン構成。packed のとき重ならないイベントを同じ行にまとめる。
   const lanes = packLanes ? packLanesOf(events) : events.map((e) => [e])
   const rowsVisible = Math.min(Math.max(lanes.length, 1), 5) // 5行を超えたら帯内を縦スクロール
@@ -920,6 +942,9 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
       </div>
       <div className="chart-head">
         <div className="chart-axis">
+          {centuryMarks.map((c, i) => (
+            <span key={'c' + i} className="axis-century" style={{ left: `${c.left}%` }}>{c.label}</span>
+          ))}
           {gridLines.map((g, i) => (
             <span key={i} className={g.major ? 'axis-tick major' : 'axis-tick'} style={{ left: `${g.left}%` }}>
               {g.topLabel && <span className="axis-year">{g.topLabel}</span>}

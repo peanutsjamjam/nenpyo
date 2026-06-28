@@ -95,6 +95,8 @@ const resources = {
       },
       axis: {
         day: '{{d}}日',
+        century: '{{n}}世紀',
+        centuryBC: '前{{n}}世紀',
       },
       // 人間向けの日付表記（自然な語順）。eraPre/eraSuf は AD/BC（日付全体の前後）。
       // 日本語は era を年に隣接（AD 794 / 660 BC）させ、その後に月日。
@@ -244,6 +246,8 @@ const resources = {
       },
       axis: {
         day: '{{d}}',
+        century: '{{n}}C',
+        centuryBC: '{{n}}C BC',
       },
       // 人間向けの日付表記（自然な語順）。英語は「月 日, 年」、AD は日付全体の前、BC は後ろ。
       date: {

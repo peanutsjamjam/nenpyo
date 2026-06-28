@@ -100,8 +100,8 @@
 }
 /* 期間バー＋水平スクロールバーをまとめる中段。開発用の枠の基準にもなる。 */
 .chart-mid { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.chart-axis { position: relative; flex: 1; height: 34px; overflow: hidden; }
-/* 縦線の直上に主ラベル（年/月/日）、その上の行に年。左端を縦線に合わせる（少し右に開始）。 */
+.chart-axis { position: relative; flex: 1; height: 50px; overflow: hidden; }
+/* 縦線の直上に主ラベル（年/月/日）、その上に年、さらに上に世紀。左端を縦線に合わせる。 */
 .axis-tick {
   position: absolute; bottom: 0; padding-left: 3px;
   font-size: 13px; color: var(--muted); white-space: nowrap;
@@ -109,6 +109,11 @@
 }
 .axis-tick.major { color: var(--text); font-weight: 700; }
 .axis-year { color: var(--text); }
+/* 最上段の世紀ラベル: 世紀バンドの開始位置に、上端へ絶対配置する。 */
+.axis-century {
+  position: absolute; top: 0; padding-left: 3px;
+  color: var(--muted); font-size: 11px; white-space: nowrap;
+}
 
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
