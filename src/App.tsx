@@ -292,9 +292,9 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
 // レーン詰め: イベントを「範囲が重ならないものは同じ行（レーン）にまとめる」ように配置する。
 // 開始座標の昇順に見て、最後の終端がこのイベントの開始以下になっている既存レーンへ入れる。
 // 入れられるレーンが無ければ新しいレーンを作る（=次の行）。
-function packLanesOf(events: EventItem[]): EventItem[][] {
+function packLanesOf<T extends EventDates>(events: T[]): T[][] {
   const sorted = [...events].sort((a, b) => eventSpan(a).s - eventSpan(b).s)
-  const lanes: { end: number; items: EventItem[] }[] = []
+  const lanes: { end: number; items: T[] }[] = []
   for (const e of sorted) {
     const { s, end } = eventSpan(e)
     let placed = false
@@ -765,7 +765,7 @@ function SettingsPanel({ settings, setSettings, onClose }: {
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom }: {
+function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
@@ -778,6 +778,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   wheelCtrl: WheelAction
   zoomFactor: number
   invertZoom: boolean
+  packLanes: boolean
 }) {
   const { t } = useTranslation()
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -852,7 +853,9 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (w || 800) / 1000))
   const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
-  const rowsVisible = Math.min(Math.max(events.length, 1), 5) // 5行を超えたら帯内を縦スクロール
+  // レーン構成。packed のとき重ならないイベントを同じ行にまとめる。
+  const lanes = packLanes ? packLanesOf(events) : events.map((e) => [e])
+  const rowsVisible = Math.min(Math.max(lanes.length, 1), 5) // 5行を超えたら帯内を縦スクロール
 
   return (
     <div className={'strip' + (selected ? ' selected' : '')} onClick={(e) => { e.stopPropagation(); onSelectStrip() }}>
@@ -890,23 +893,28 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
           </div>
           {events.length === 0 ? (
             <p className="strip-empty">{t('explorer.noEvents')}</p>
-          ) : events.map((e) => {
-            const { s, end } = eventSpan(e)
-            const left = pct(s)
-            const right = pct(end)
-            const barLeft = Math.max(left, -BAR_CLAMP)
-            const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
-            const title = e.title || t('common.untitled')
-            const tip = `${title}（${formatRangeAD(e)}）`
-            return (
-              <div className={'chart-row' + (e.id === selectedId ? ' selected' : '')} key={e.id}>
-                <div className="chart-track">
-                  <div className="chart-bar" style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
-                  <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
-                </div>
+          ) : lanes.map((lane, laneIdx) => (
+            <div className="chart-row" key={laneIdx}>
+              <div className="chart-track">
+                {lane.map((e) => {
+                  const { s, end } = eventSpan(e)
+                  const left = pct(s)
+                  const right = pct(end)
+                  const barLeft = Math.max(left, -BAR_CLAMP)
+                  const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
+                  const title = e.title || t('common.untitled')
+                  const tip = `${title}（${formatRangeAD(e)}）`
+                  const sel = e.id === selectedId
+                  return (
+                    <span key={e.id}>
+                      <div className={'chart-bar' + (sel ? ' selected' : '')} style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
+                      <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
+                    </span>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -914,7 +922,7 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
 }
 
 // ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
-function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom }: {
+function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes }: {
   onClose: () => void
   username: string
   onFollowChange?: () => void
@@ -923,6 +931,7 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
   wheelCtrl: WheelAction
   zoomFactor: number
   invertZoom: boolean
+  packLanes: boolean
 }) {
   const { t } = useTranslation()
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
@@ -977,6 +986,7 @@ function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, w
               wheelCtrl={wheelCtrl}
               zoomFactor={zoomFactor}
               invertZoom={invertZoom}
+              packLanes={packLanes}
             />
           ))}
         </div>
@@ -1059,11 +1069,11 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   })
   // 開発用フラスコ1: 期間バーをレーン詰め表示にするトグル。
   const [packLanes, setPackLanes] = useState(false)
-  // 開発用フラスコボタン（実験用機能の割り当て先）。active と onClick を持つ。
+  // 開発用フラスコボタン（実験用機能の割り当て先）。active と onClick と title を持つ。
   const devButtons = [
-    { active: packLanes, onClick: () => setPackLanes((v) => !v) },
-    { active: false, onClick: () => { /* フラスコ2: 未割り当て */ } },
-    { active: false, onClick: () => { /* フラスコ3: 未割り当て */ } },
+    { active: packLanes, title: 'packed/unpacked 切替', onClick: () => setPackLanes((v) => !v) },
+    { active: false, title: '開発用フラスコ2', onClick: () => { /* フラスコ2: 未割り当て */ } },
+    { active: false, title: '開発用フラスコ3', onClick: () => { /* フラスコ3: 未割り当て */ } },
   ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
   const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
@@ -1462,7 +1472,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               <button
                 key={i}
                 className={'icon-btn dev-btn' + (b.active ? ' active' : '')}
-                title={`開発用フラスコ${i + 1}`}
+                title={b.title}
                 disabled={showSettings}
                 onClick={b.onClick}
               >
@@ -1601,6 +1611,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 wheelCtrl={settings.wheelCtrl}
                 zoomFactor={settings.zoomFactor}
                 invertZoom={settings.invertZoom}
+                packLanes={packLanes}
               />
             ) : (events.length > 0 || followedEvents.length > 0) ? (
               <TimelineChart
