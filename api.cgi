@@ -151,6 +151,22 @@ sub db {
     return $dbh;
 }
 
+# 新規ユーザー用のサンプル年表を作る。ddl/default_example_*.sql を読み、
+# :uid を対象ユーザー id（自前生成の整数なので安全）に置換して実行する。
+# 失敗してもユーザー登録自体は成功させたいので、エラーは warn のみ。
+sub seed_examples {
+    my ($dbh, $uid) = @_;
+    my $base = $ENV{SCRIPT_FILENAME} || '';
+    $base =~ s#/[^/]*$##;   # api.cgi のあるディレクトリ
+    for my $f ('default_example_Japan.sql', 'default_example_USA.sql') {
+        my $path = "$base/ddl/$f";
+        open my $fh, '<:encoding(UTF-8)', $path or do { warn "seed_examples: open $path failed: $!\n"; next };
+        local $/; my $sql = <$fh>; close $fh;
+        $sql =~ s/:uid\b/$uid/g;   # uid は整数
+        eval { $dbh->do($sql); 1 } or warn "seed_examples: exec $f failed: $@\n";
+    }
+}
+
 # ---- セッション ------------------------------------------------------------
 sub set_session_cookie {
     my ($token) = @_;
@@ -337,6 +353,7 @@ eval {
              VALUES (?,?,?,?) RETURNING id',
             undef, $username, $hash, $salt, $PBKDF2_ITER
         );
+        seed_examples($dbh, $uid);   # サンプル年表（日本 / USA）を作成
         my $token = random_hex(32);
         $dbh->do(
             "INSERT INTO sessions (token, user_id, expires_at)
