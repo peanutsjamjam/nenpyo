@@ -22,6 +22,16 @@
 .icon-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
+/* セグメント切替（2択モード: packed/unpacked）。選択中の側をハイライト */
+.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border: none; background: var(--input-bg); color: var(--text); cursor: pointer;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover:not(.active):not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.seg-btn.active { background: var(--accent); color: #fff; }
+.seg-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- 本体 2カラム ---- */
 .body { display: flex; flex: 1; min-height: 0; position: relative; }

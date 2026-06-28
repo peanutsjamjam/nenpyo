@@ -51,9 +51,12 @@ const resources = {
         itemCount: '{{n}}件',
       },
       nav: {
+        mine: '自分の年表を見る',
         explorer: 'エクスプローラー（他ユーザーの年表を探す）',
         settings: '設定',
         logout: 'ログアウト',
+        unpacked: '1行ずつ表示',
+        packed: '詰めて表示',
       },
       sidebar: {
         timelines: '年表',
@@ -196,9 +199,12 @@ const resources = {
         itemCount: '{{n}}',
       },
       nav: {
+        mine: 'View my timelines',
         explorer: 'Explorer (browse others’ timelines)',
         settings: 'Settings',
         logout: 'Log out',
+        unpacked: 'One row per item',
+        packed: 'Pack into rows',
       },
       sidebar: {
         timelines: 'Timelines',

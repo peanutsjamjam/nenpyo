@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User } from 'lucide-react'
 import { api, formatRangeAD, monthLabel, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
 import { useTranslation } from 'react-i18next'
 import i18n, { detectLang, type Lang } from './i18n'
@@ -1117,13 +1117,13 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
-  // 開発用フラスコ1: 期間バーをレーン詰め表示にするトグル。
+  // 期間バーをレーン詰め表示にするか（packed/unpacked）。トップバーのセグメントトグルで切替。
   const [packLanes, setPackLanes] = useState(false)
-  // 開発用フラスコボタン（実験用機能の割り当て先）。active と onClick と title を持つ。
+  // 開発用フラスコボタン（実験用機能の割り当て先。今は未割り当て）。
   const devButtons = [
-    { active: packLanes, title: 'packed/unpacked 切替', onClick: () => setPackLanes((v) => !v) },
-    { active: false, title: '開発用フラスコ2', onClick: () => { /* フラスコ2: 未割り当て */ } },
-    { active: false, title: '開発用フラスコ3', onClick: () => { /* フラスコ3: 未割り当て */ } },
+    { active: false, title: '開発用フラスコ1', onClick: () => { /* 未割り当て */ } },
+    { active: false, title: '開発用フラスコ2', onClick: () => { /* 未割り当て */ } },
+    { active: false, title: '開発用フラスコ3', onClick: () => { /* 未割り当て */ } },
   ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
   const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
@@ -1507,14 +1507,44 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand" onClick={() => { if (!showSettings) window.location.reload() }}><ScrollText size={22} /> nenpyo</div>
-          <button
-            className={'icon-btn' + (showExplorer ? ' active' : '')}
-            title={t('nav.explorer')}
-            disabled={showSettings}
-            onClick={() => setShowExplorer((v) => !v)}
-          >
-            <Compass size={18} />
-          </button>
+          {/* 画面切替のセグメント（2択）。左=自分の年表 / 右=エクスプローラー */}
+          <div className="seg-toggle" role="group">
+            <button
+              className={'seg-btn' + (!showExplorer ? ' active' : '')}
+              title={t('nav.mine')} aria-label={t('nav.mine')} aria-pressed={!showExplorer}
+              disabled={showSettings}
+              onClick={() => setShowExplorer(false)}
+            >
+              <User size={18} />
+            </button>
+            <button
+              className={'seg-btn' + (showExplorer ? ' active' : '')}
+              title={t('nav.explorer')} aria-label={t('nav.explorer')} aria-pressed={showExplorer}
+              disabled={showSettings}
+              onClick={() => setShowExplorer(true)}
+            >
+              <Compass size={18} />
+            </button>
+          </div>
+          {/* packed/unpacked のセグメント切替（2択モード）。左=1行ずつ / 右=詰める */}
+          <div className="seg-toggle" role="group">
+            <button
+              className={'seg-btn' + (!packLanes ? ' active' : '')}
+              title={t('nav.unpacked')} aria-label={t('nav.unpacked')} aria-pressed={!packLanes}
+              disabled={showSettings}
+              onClick={() => setPackLanes(false)}
+            >
+              <ChartBarBig size={18} />
+            </button>
+            <button
+              className={'seg-btn' + (packLanes ? ' active' : '')}
+              title={t('nav.packed')} aria-label={t('nav.packed')} aria-pressed={packLanes}
+              disabled={showSettings}
+              onClick={() => setPackLanes(true)}
+            >
+              <ChartBarStacked size={18} />
+            </button>
+          </div>
         </div>
         {DEV_BUTTON && (
           <div className="topbar-center">
