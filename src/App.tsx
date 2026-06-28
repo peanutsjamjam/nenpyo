@@ -569,10 +569,15 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
                   // 色はイベントが属する年表のもの。
                   const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
                   const title = e.title || t('common.untitled')
-                  // バーが完全に画面外なら矢印で方向を示す
+                  // バーが完全に画面外なら矢印で方向を示す。
+                  // フラスコ1(レーン詰め)時は文字の重なりを避けるため三角だけ表示。
                   const offLeft = end < rangeStart
                   const offRight = s > rangeEnd
-                  const labelText = offLeft ? `◀ ${title}` : offRight ? `${title} ▶` : title
+                  const labelText = offLeft
+                    ? (packLanes ? '◀' : `◀ ${title}`)
+                    : offRight
+                      ? (packLanes ? '▶' : `${title} ▶`)
+                      : title
                   // タイトルの中心位置: 基本はバー中央。ただしタイトル全体が画面内に収まるよう、
                   // また可能ならバーの範囲内に収まるよう左右に「貼り付く」（端で固定される）。
                   const halfPct = chartW > 0 ? (estLabelPx(labelText) / 2) / chartW * 100 : 0
