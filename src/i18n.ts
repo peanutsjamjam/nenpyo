@@ -92,6 +92,13 @@ const resources = {
       axis: {
         day: '{{d}}日',
       },
+      // 人間向けの日付表記（自然な語順）。eraPre/eraSuf は AD/BC（日付全体の前後）。
+      // 日本語は era を年に隣接（AD 794 / 660 BC）させ、その後に月日。
+      date: {
+        y: '{{eraPre}}{{year}}{{eraSuf}}',
+        ym: '{{eraPre}}{{year}}{{eraSuf}} {{month}}',
+        ymd: '{{eraPre}}{{year}}{{eraSuf}} {{month}}{{day}}日',
+      },
       explorer: {
         title: 'エクスプローラー',
         empty: '表示できる年表がありません。',
@@ -229,6 +236,12 @@ const resources = {
       },
       axis: {
         day: '{{d}}',
+      },
+      // 人間向けの日付表記（自然な語順）。英語は「月 日, 年」、AD は日付全体の前、BC は後ろ。
+      date: {
+        y: '{{eraPre}}{{year}}{{eraSuf}}',
+        ym: '{{eraPre}}{{month}} {{year}}{{eraSuf}}',
+        ymd: '{{eraPre}}{{month}} {{day}}, {{year}}{{eraSuf}}',
       },
       explorer: {
         title: 'Explorer',

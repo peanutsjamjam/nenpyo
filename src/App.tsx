@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
-import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
+import { api, formatRangeAD, monthLabel, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
 import { useTranslation } from 'react-i18next'
 import i18n, { detectLang, type Lang } from './i18n'
 import './App.css'
@@ -186,15 +186,6 @@ function gridYearLabel(year: number): string {
   if (year < 0) return `${-year}BC`
   if (year >= 1000) return `${year}`
   return `AD${year}`
-}
-
-// 月の短縮名をロケール対応で返す（例: 3月 / Mar）。年に依存しないダミー日付で整形。
-const monthFmtCache = new Map<string, Intl.DateTimeFormat>()
-function monthLabel(month: number): string {
-  const loc = i18n.language || 'en'
-  let fmt = monthFmtCache.get(loc)
-  if (!fmt) { fmt = new Intl.DateTimeFormat(loc, { month: 'short' }); monthFmtCache.set(loc, fmt) }
-  return fmt.format(new Date(2000, month - 1, 1))
 }
 
 // グリッド刻みとズーム範囲（座標=年単位）。最小は1日、最大は10万年スケール。

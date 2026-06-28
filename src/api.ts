@@ -138,20 +138,34 @@ export const api = {
 }
 
 // 年の AD/BC 表記。BC は数字の後ろ、AD は数字の前。西暦1000年以上は「AD」を付けない。
+// BC/AD はラテン略号として言語によらず共通（日本語でも通用するため）。
 export function formatYearAD(year: number): string {
   if (year < 0) return `${-year} BC`
   if (year >= 1000) return `${year}`
   return `AD ${year}`
 }
 
-// 年月日を AD/BC 表記でまとめて表示（「年」は使わず、月日はそのまま）。
+// 月の短縮名をロケール対応で返す（例: 7月 / Jul）。年に依存しないダミー日付で整形。
+const monthFmtCache = new Map<string, Intl.DateTimeFormat>()
+export function monthLabel(month: number): string {
+  const loc = i18n.language || 'en'
+  let fmt = monthFmtCache.get(loc)
+  if (!fmt) { fmt = new Intl.DateTimeFormat(loc, { month: 'short' }); monthFmtCache.set(loc, fmt) }
+  return fmt.format(new Date(2000, month - 1, 1))
+}
+
+// 年月日を「人間が読む用」に整形する。語順は各言語の自然な並びに従う
+// （日本語: 年→月→日 / 英語: 月 日, 年）。
+// AD/BC は年に固定せず era トークン（前置 eraPre / 後置 eraSuf）として分離し、
+// テンプレート側で日付全体の前後に置けるようにする（例: 英語 "AD Jul 8, 794"）。
+// AD は前置、BC は後置、西暦1000年以上は付けない。
 export function formatDateAD(year: number, month: number | null, day: number | null): string {
-  let s = formatYearAD(year)
-  if (month != null) {
-    s += ` ${month}月`
-    if (day != null) s += `${day}日`
-  }
-  return s
+  let eraPre = '', eraSuf = '', y = year
+  if (year < 0) { eraSuf = ' BC'; y = -year }
+  else if (year < 1000) { eraPre = 'AD ' }
+  const params = { eraPre, eraSuf, year: y, month: month != null ? monthLabel(month) : '', day }
+  if (month == null) return i18n.t('date.y', params)
+  return day == null ? i18n.t('date.ym', params) : i18n.t('date.ymd', params)
 }
 
 export type ParsedDate = { year: number | null; month: number | null; day: number | null }
