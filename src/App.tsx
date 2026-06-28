@@ -188,6 +188,15 @@ function gridYearLabel(year: number): string {
   return `AD${year}`
 }
 
+// 月の短縮名をロケール対応で返す（例: 3月 / Mar）。年に依存しないダミー日付で整形。
+const monthFmtCache = new Map<string, Intl.DateTimeFormat>()
+function monthLabel(month: number): string {
+  const loc = i18n.language || 'en'
+  let fmt = monthFmtCache.get(loc)
+  if (!fmt) { fmt = new Intl.DateTimeFormat(loc, { month: 'short' }); monthFmtCache.set(loc, fmt) }
+  return fmt.format(new Date(2000, month - 1, 1))
+}
+
 // グリッド刻みとズーム範囲（座標=年単位）。最小は1日、最大は10万年スケール。
 const DAY = 1 / 366                   // 公称1日（刻み選択・最小ズーム・現在帯幅用。実日幅は年で可変）
 const MONTH = 1 / 12                  // 公称1ヶ月（刻み選択用）
@@ -265,7 +274,7 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
       if (p >= rangeStart) {
         gridLines.push({
           left: pct(p), major: y === 1 && m === 1,
-          topLabel: m === 1 ? gridYearLabel(y) : '', bottomLabel: `${m}月`,
+          topLabel: m === 1 ? gridYearLabel(y) : '', bottomLabel: monthLabel(m),
         })
       }
       m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } // 西暦0年は飛ばす
@@ -279,7 +288,7 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
       if (p > rangeEnd) break
       if (p >= rangeStart) {
         let topLabel = ''
-        if (d === 1) topLabel = `${gridYearLabel(y)} ${m}月` // 各月1日に「年 ○月」（毎月、年も付ける）
+        if (d === 1) topLabel = `${gridYearLabel(y)} ${monthLabel(m)}` // 各月1日に「年 ○月」（毎月、年も付ける）
         gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: `${d}日` })
       }
       d++
