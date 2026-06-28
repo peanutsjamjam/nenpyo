@@ -857,6 +857,50 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
   const lanes = packLanes ? packLanesOf(events) : events.map((e) => [e])
   const rowsVisible = Math.min(Math.max(lanes.length, 1), 5) // 5行を超えたら帯内を縦スクロール
 
+  // 選択中の帯に出す横スクロールバー（本体チャートと同じ仕組み）。
+  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
+  const hbarRef = useRef<HTMLDivElement>(null)
+  const contentMin = ext ? ext.min : center
+  const contentMax = ext ? ext.max : center
+  const total = ext && ext.max > ext.min ? ext.max - ext.min : yearsVisible
+  const thumbW = Math.max(2, Math.min(100, (yearsVisible / total) * 100))
+  const panRange = total - yearsVisible
+  const thumbF = panRange > 0 ? clamp((rangeStart - contentMin) / panRange, 0, 1) : 0
+  const thumbLeft = thumbF * (100 - thumbW)
+  const setCenter = (c: number) => setView({ center: c, yearsVisible })
+  const pageHPan = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    if (panRange <= 0) return
+    const track = hbarRef.current?.getBoundingClientRect()
+    if (!track || track.width <= 0) return
+    const clickF = (e.clientX - track.left) / track.width
+    const dir = clickF < thumbLeft / 100 ? -1 : clickF > (thumbLeft + thumbW) / 100 ? 1 : 0
+    if (!dir) return
+    setCenter(clamp(center + dir * yearsVisible, contentMin + yearsVisible / 2, contentMax - yearsVisible / 2))
+  }
+  const startHPan = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const track = hbarRef.current?.getBoundingClientRect()
+    if (!track || panRange <= 0) return
+    const usablePx = track.width * (1 - thumbW / 100)
+    if (usablePx <= 0) return
+    const startX = e.clientX
+    const startCenter = center
+    const onMove = (ev: MouseEvent) => {
+      const df = (ev.clientX - startX) / usablePx
+      setCenter(clamp(startCenter + df * panRange, contentMin + yearsVisible / 2, contentMax - yearsVisible / 2))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   return (
     <div className={'strip' + (selected ? ' selected' : '')} onClick={(e) => { e.stopPropagation(); onSelectStrip() }}>
       <div className="strip-head">
@@ -917,6 +961,12 @@ function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, min
           ))}
         </div>
       </div>
+      {/* 選択中の帯だけ、下部に横スクロールバーを表示（ドラッグ／クリックで左右移動）。 */}
+      {selected && panRange > 0 && (
+        <div className="chart-hbar strip-hbar" ref={hbarRef} onMouseDown={pageHPan}>
+          <div className="chart-hthumb" style={{ left: `${thumbLeft}%`, width: `${thumbW}%` }} onMouseDown={startHPan} />
+        </div>
+      )}
     </div>
   )
 }

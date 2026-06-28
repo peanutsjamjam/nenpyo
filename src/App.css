@@ -120,6 +120,8 @@
 }
 .chart-hthumb:hover { filter: brightness(0.92); }
 .chart-hthumb:active { cursor: grabbing; }
+/* エクスプローラーの帯の横スクロールバー（選択時のみ表示）。少し細め＋上下に余白 */
+.strip-hbar { height: 10px; margin: 6px 0 2px; }
 
 .chart-body { position: relative; min-height: 100%; }
 /* スケール連動の縦グリッド線（全行の背面に1枚で敷く） */
