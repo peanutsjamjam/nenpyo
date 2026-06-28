@@ -2,6 +2,7 @@
 
 /* ---- トップバー ---- */
 .topbar {
+  position: relative;
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
@@ -9,6 +10,8 @@
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 19px; color: var(--accent); cursor: pointer; }
 /* 開発用ボタン（一時的）。アクセント色で目印に。 */
 .dev-btn { color: var(--accent); border-style: dashed; }
+/* 開発用フラスコ（3つ）は画面の左右中央に横並びで配置 */
+.topbar-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .who { color: var(--muted); font-size: 14px; }
 .icon-btn {
@@ -36,16 +39,6 @@
 /* ---- エディタ ---- */
 .editor { flex: 1; min-width: 0; display: flex; padding: 24px 20px; overflow-y: auto; position: relative; }
 
-/* 開発用: 各領域を囲む透明な四角＋ラベル（操作は透過する） */
-.dev-box {
-  position: absolute; inset: 0; z-index: 30; pointer-events: none;
-  border: 2px dashed var(--accent); background: transparent;
-}
-.dev-label {
-  position: absolute; top: 2px; left: 4px;
-  font-size: 12px; font-weight: 700; color: var(--accent);
-  background: var(--bg); padding: 0 5px; border-radius: 4px;
-}
 
 /* 設定・編集パネルはメイン（年表）の上に重ねる。パネル外は透明で背後がそのまま見える。 */
 .panel-overlay {
@@ -298,7 +291,7 @@
 .wheel-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
 /* 左サイドバー: 一覧の見出し（イベント／タグ共通） */
-.list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-right: 6px; }
 .list-head-title { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
 /* 見出し左の畳む/展開ボタン（▼/▶ ＋ タイトル） */
 .list-collapse {

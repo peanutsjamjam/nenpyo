@@ -317,7 +317,7 @@ function textColorFor(hex: string): string {
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, devOverlay, centerRequest, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number | null) => void
@@ -331,7 +331,6 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   wheelShift: WheelAction
   wheelCtrl: WheelAction
   zoomFactor: number
-  devOverlay: boolean
   centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
 }) {
@@ -496,7 +495,6 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   return (
     <div className="chart">
       <div className="chart-head">
-        {devOverlay && <div className="dev-box"><span className="dev-label">上バー</span></div>}
         <div className="chart-axis">
           {gridLines.map((g, i) => (
             <span
@@ -512,7 +510,6 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       </div>
 
       <div className="chart-mid">
-        {devOverlay && <div className="dev-box"><span className="dev-label">メイン領域</span></div>}
       <div
         className="chart-scroll"
         ref={scrollRef}
@@ -593,7 +590,6 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
       </div>
 
       <div className="chart-hint hint">
-        {devOverlay && <div className="dev-box"><span className="dev-label">下バー</span></div>}
         {selectedEvent ? (
           <div className="chart-sel">
             <div className="chart-sel-head">
@@ -1027,8 +1023,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
-  // 開発用: メイン領域を可視化するオーバーレイ
-  const [devOverlay, setDevOverlay] = useState(false)
+  // 開発用フラスコボタン（実験用機能の割り当て先。今は何もしない）。
+  const devButtons = [
+    () => { /* フラスコ1: 未割り当て */ },
+    () => { /* フラスコ2: 未割り当て */ },
+    () => { /* フラスコ3: 未割り当て */ },
+  ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
   const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
   // エクスプローラー（他ユーザーの年表を探す）画面の表示
@@ -1411,16 +1411,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand" onClick={() => { if (!showSettings) window.location.reload() }}><ScrollText size={22} /> nenpyo</div>
-          {DEV_BUTTON && (
-            <button
-              className={'icon-btn dev-btn' + (devOverlay ? ' active' : '')}
-              title="開発用: メイン領域を表示"
-              disabled={showSettings}
-              onClick={() => setDevOverlay((v) => !v)}
-            >
-              <FlaskConical size={18} />
-            </button>
-          )}
           <button
             className={'icon-btn' + (showExplorer ? ' active' : '')}
             title={t('nav.explorer')}
@@ -1430,6 +1420,21 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
             <Compass size={18} />
           </button>
         </div>
+        {DEV_BUTTON && (
+          <div className="topbar-center">
+            {devButtons.map((fn, i) => (
+              <button
+                key={i}
+                className="icon-btn dev-btn"
+                title={`開発用フラスコ${i + 1}`}
+                disabled={showSettings}
+                onClick={fn}
+              >
+                <FlaskConical size={18} />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="topbar-right">
           <span className="who">{username}</span>
           <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
@@ -1440,7 +1445,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
       <div className="body" ref={bodyRef}>
         <aside className="list" style={{ width: sidebarWidth }}>
           <div className="list-pane" style={timelinesCollapsed ? { flex: '0 0 auto' } : { flex: '1 1 0', minHeight: 0 }}>
-            {DEV_BUTTON && devOverlay && <div className="dev-box"><span className="dev-label">年表エリア</span></div>}
             <div className="list-head">
               <button className="list-collapse" title={timelinesCollapsed ? t('common.expand') : t('common.collapse')} onClick={() => setTimelinesCollapsed((v) => !v)}>
                 {timelinesCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
@@ -1577,7 +1581,6 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 wheelShift={settings.wheelShift}
                 wheelCtrl={settings.wheelCtrl}
                 zoomFactor={settings.zoomFactor}
-                devOverlay={DEV_BUTTON && devOverlay}
                 centerRequest={centerReq}
                 tagColors={tagColors}
               />
