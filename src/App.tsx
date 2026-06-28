@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouse
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical } from 'lucide-react'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
 import { useTranslation } from 'react-i18next'
-import i18n, { type Lang } from './i18n'
+import i18n, { detectLang, type Lang } from './i18n'
 import './App.css'
 
 // 開発用ボタンの表示フラグ。本番で隠す／不要になったら false に（または削除）。
@@ -30,7 +30,7 @@ const SETTINGS_KEY = 'nenpyo-settings'
 function loadSettings(): AppSettings {
   const defaults: AppSettings = {
     theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-    lang: 'ja',
+    lang: detectLang(),
     invertZoom: false,
     wheelPlain: 'scroll',
     wheelShift: 'pan',

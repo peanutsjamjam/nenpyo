@@ -279,25 +279,40 @@ const resources = {
   },
 }
 
-// 起動時の言語は保存済み設定（nenpyo-settings.lang）から決める。
-// ログイン前（AuthView）でも保存した言語で表示されるようにするため。
-function initialLang(): Lang {
+// 起動時/設定の既定言語を決める。
+//   1) 保存済み設定（nenpyo-settings.lang）があればそれ（ユーザーの明示選択を尊重）
+//   2) 無ければブラウザの優先言語 navigator.languages から対応言語を推測
+//   3) それも無ければ en
+// ログイン前（AuthView）でも適切な言語で表示されるよう、i18n と loadSettings の両方で使う。
+export function detectLang(): Lang {
+  // 1) 保存済み設定
   try {
     const raw = localStorage.getItem('nenpyo-settings')
     if (raw) {
       const v = JSON.parse(raw)
       if (v && (LANGUAGES as readonly string[]).includes(v.lang)) return v.lang as Lang
     }
-  } catch { /* 壊れていたら既定 */ }
-  return 'ja'
+  } catch { /* 壊れていたら無視 */ }
+  // 2) ブラウザの優先言語（en-US -> en のように地域コードを落として照合）
+  try {
+    const prefs = (typeof navigator !== 'undefined' && navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : (typeof navigator !== 'undefined' && navigator.language ? [navigator.language] : [])
+    for (const p of prefs) {
+      const base = p.toLowerCase().split('-')[0]
+      if ((LANGUAGES as readonly string[]).includes(base)) return base as Lang
+    }
+  } catch { /* 無視 */ }
+  // 3) 既定
+  return 'en'
 }
 
-const startLang = initialLang()
+const startLang = detectLang()
 
 i18n.use(initReactI18next).init({
   resources,
   lng: startLang,
-  fallbackLng: 'ja',
+  fallbackLng: 'en',
   interpolation: { escapeValue: false }, // React が自前でエスケープするため不要
 })
 
