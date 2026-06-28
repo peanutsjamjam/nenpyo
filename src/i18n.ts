@@ -89,6 +89,9 @@ const resources = {
       chart: {
         selectHint: 'イベントを選択すると詳細を表示します',
       },
+      axis: {
+        day: '{{d}}日',
+      },
       explorer: {
         title: 'エクスプローラー',
         empty: '表示できる年表がありません。',
@@ -223,6 +226,9 @@ const resources = {
       },
       chart: {
         selectHint: 'Select an event to see details',
+      },
+      axis: {
+        day: '{{d}}',
       },
       explorer: {
         title: 'Explorer',

@@ -289,7 +289,7 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
       if (p >= rangeStart) {
         let topLabel = ''
         if (d === 1) topLabel = `${gridYearLabel(y)} ${monthLabel(m)}` // 各月1日に「年 ○月」（毎月、年も付ける）
-        gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: `${d}日` })
+        gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: i18n.t('axis.day', { d }) })
       }
       d++
       if (d > daysInMonth(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } }
