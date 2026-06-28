@@ -60,9 +60,12 @@ sub respond {
 }
 
 sub fail {
-    my ($message, $status) = @_;
+    # $code はエラーコード（フロントで i18n 翻訳）。$params は補間値（任意）。
+    my ($code, $status, $params) = @_;
     $status ||= '400 Bad Request';
-    respond({ error => $message }, $status);
+    my $body = { error => $code };
+    $body->{params} = $params if defined $params;
+    respond($body, $status);
 }
 
 # ---- 入力 ------------------------------------------------------------------
@@ -138,7 +141,7 @@ sub db {
     my $dbh = DBI->connect(
         'dbi:Pg:dbname=nenpyo', '', '',
         { RaiseError => 1, AutoCommit => 1, PrintError => 0, pg_enable_utf8 => 1 }
-    ) or fail('db connect failed', '500 Internal Server Error');
+    ) or fail('db_error', '500 Internal Server Error');
     return $dbh;
 }
 
@@ -170,7 +173,7 @@ sub current_user {
 sub require_user {
     my ($dbh) = @_;
     my $u = current_user($dbh);
-    fail('not authenticated', '401 Unauthorized') unless $u;
+    fail('not_authenticated', '401 Unauthorized') unless $u;
     return $u;
 }
 
@@ -187,31 +190,33 @@ sub days_in_month {
     return $ml[$m - 1];
 }
 
-# 年月日の3つ組を検証。year_required が真なら年は必須。
-# 年が無ければ (undef,undef,undef) を返す。月無しで日のみ／年無しで月のみは不可。
+# 年月日の3つ組を検証。$field は 'start' / 'end'（エラーコードの補間に使う）。
+# year_required が真なら年は必須。年が無ければ (undef,undef,undef) を返す。
 sub clean_date {
-    my ($label, $y, $mo, $d, $required) = @_;
+    my ($field, $y, $mo, $d, $required) = @_;
+    my $p = { field => $field };
     my ($year, $month, $day);
     if (defined $y && "$y" ne '') {
-        fail("${label}の年が不正です") unless "$y" =~ /^-?\d+$/;
+        fail('date_year_invalid', undef, $p) unless "$y" =~ /^-?\d+$/;
         $year = 0 + $y;
         # 先史時代（縄文=前14000年頃など）も扱えるよう下限を広く取る
-        fail("${label}の年が範囲外です") if $year < -1000000 || $year > 9999;
+        fail('date_year_range', undef, $p) if $year < -1000000 || $year > 9999;
         # 西暦0年は存在しない（1BCの翌日はAD1）。紀元前は負、紀元後は正で指定する。
-        fail("西暦0年は存在しません（紀元前は負の数、例: -1 を使ってください）") if $year == 0;
+        fail('year_zero') if $year == 0;
     } else {
-        fail("${label}の年は必須です") if $required;
+        fail('date_year_required', undef, $p) if $required;
         return (undef, undef, undef);
     }
     if (defined $mo && "$mo" ne '') {
-        fail("${label}の月が不正です") unless "$mo" =~ /^\d+$/ && $mo >= 1 && $mo <= 12;
+        fail('date_month_invalid', undef, $p) unless "$mo" =~ /^\d+$/ && $mo >= 1 && $mo <= 12;
         $month = 0 + $mo;
     }
     if (defined $d && "$d" ne '') {
-        fail("${label}の日は月とともに指定してください") unless defined $month;
-        fail("${label}の日が不正です") unless "$d" =~ /^\d+$/;
+        fail('date_day_needs_month', undef, $p) unless defined $month;
+        fail('date_day_invalid', undef, $p) unless "$d" =~ /^\d+$/;
         my $dim = days_in_month($year, $month);
-        fail("${label}の日が範囲外です（${month}月は${dim}日まで）") unless $d >= 1 && $d <= $dim;
+        fail('date_day_range', undef, { field => $field, month => 0 + $month, max => 0 + $dim })
+            unless $d >= 1 && $d <= $dim;
         $day = 0 + $d;
     }
     return ($year, $month, $day);
@@ -220,14 +225,14 @@ sub clean_date {
 # 入力を検証して (sy,sm,sd, ey,em,ed, title,detail) に正規化
 sub clean_event {
     my ($body) = @_;
-    my ($sy, $sm, $sd) = clean_date('開始', $body->{start_year}, $body->{start_month}, $body->{start_day}, 1);
-    my ($ey, $em, $ed) = clean_date('終了', $body->{end_year},   $body->{end_month},   $body->{end_day},   0);
+    my ($sy, $sm, $sd) = clean_date('start', $body->{start_year}, $body->{start_month}, $body->{start_day}, 1);
+    my ($ey, $em, $ed) = clean_date('end',   $body->{end_year},   $body->{end_month},   $body->{end_day},   0);
 
     my $title  = defined $body->{title}  ? $body->{title}  : '';
     my $detail = defined $body->{detail} ? $body->{detail} : '';
     $title =~ s/\r//g; $title =~ s/\n/ /g;
-    fail('タイトルは100文字以内にしてください') if length($title) > 100;
-    fail('詳細は1000文字以内にしてください')   if length($detail) > 1000;
+    fail('title_too_long')  if length($title) > 100;
+    fail('detail_too_long') if length($detail) > 1000;
 
     return ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail);
 }
@@ -283,10 +288,10 @@ sub clean_tag {
     my $name = defined $body->{name} ? $body->{name} : '';
     $name =~ s/^\s+|\s+$//g;
     $name =~ s/[\r\n]/ /g;
-    fail('年表名を入力してください') if $name eq '';
-    fail('年表名は40文字以内にしてください') if length($name) > 40;
+    fail('timeline_name_required') if $name eq '';
+    fail('timeline_name_too_long') if length($name) > 40;
     my $color = defined $body->{color} && "$body->{color}" ne '' ? $body->{color} : '#9a6b3f';
-    fail('色の形式が正しくありません（例: #aabbcc）') unless $color =~ /^#[0-9a-fA-F]{6}$/;
+    fail('invalid_color') unless $color =~ /^#[0-9a-fA-F]{6}$/;
     return ($name, lc $color);
 }
 
@@ -312,12 +317,12 @@ eval {
         my $username = defined $body->{username} ? $body->{username} : '';
         my $password = defined $body->{password} ? $body->{password} : '';
         $username =~ s/^\s+|\s+$//g;
-        fail('ユーザー名は1〜50文字で入力してください') if $username eq '' || length($username) > 50;
-        fail('パスワードは4文字以上にしてください') if length($password) < 4;
-        fail('パスワードは128文字以内にしてください') if length($password) > 128;
+        fail('username_length') if $username eq '' || length($username) > 50;
+        fail('password_too_short') if length($password) < 4;
+        fail('password_too_long') if length($password) > 128;
 
         my $exists = $dbh->selectrow_array('SELECT 1 FROM users WHERE username = ?', undef, $username);
-        fail('このユーザー名は既に使われています', '409 Conflict') if $exists;
+        fail('username_taken', '409 Conflict') if $exists;
 
         my $salt = random_hex(16);
         my $hash = pbkdf2($password, $salt, $PBKDF2_ITER);
@@ -344,9 +349,9 @@ eval {
             'SELECT id, username, password_hash, salt, iterations FROM users WHERE username = ?',
             undef, $username
         );
-        fail('ユーザー名またはパスワードが違います', '401 Unauthorized') unless $u;
+        fail('invalid_credentials', '401 Unauthorized') unless $u;
         my $hash = pbkdf2($password, $u->{salt}, $u->{iterations});
-        fail('ユーザー名またはパスワードが違います', '401 Unauthorized')
+        fail('invalid_credentials', '401 Unauthorized')
             unless const_eq($hash, $u->{password_hash});
 
         my $token = random_hex(32);
@@ -367,7 +372,7 @@ eval {
     }
     elsif ($action eq 'me' && $method eq 'GET') {
         my $u = current_user($dbh);
-        fail('not authenticated', '401 Unauthorized') unless $u;
+        fail('not_authenticated', '401 Unauthorized') unless $u;
         respond({ username => $u->{username} });
     }
     elsif ($action eq 'events' && $method eq 'GET') {
@@ -396,8 +401,8 @@ eval {
     elsif ($action eq 'event' && $method eq 'PUT') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
-        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
-        fail('not found', '404 Not Found') unless event_row($dbh, $u->{id}, $id);
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        fail('not_found', '404 Not Found') unless event_row($dbh, $u->{id}, $id);
         my $body = read_body_json();
         my ($sy, $sm, $sd, $ey, $em, $ed, $title, $detail) = clean_event($body);
         my $nid = owned_nenpyo_id($dbh, $u->{id}, $body->{nenpyo_id});
@@ -415,7 +420,7 @@ eval {
     elsif ($action eq 'event' && $method eq 'DELETE') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
-        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
         $dbh->do('DELETE FROM events WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }
@@ -475,7 +480,7 @@ eval {
         my $u = require_user($dbh);
         # 新規の年表。並び順は末尾（最大+1）。
         my ($name, $color) = clean_tag(read_body_json());
-        fail('同じ名前の年表が既にあります', '409 Conflict')
+        fail('timeline_name_taken', '409 Conflict')
             if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=?', undef, $u->{id}, $name);
         my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM nenpyo WHERE user_id=?', undef, $u->{id});
         my $row = $dbh->selectrow_hashref(
@@ -489,7 +494,7 @@ eval {
         my $u = require_user($dbh);
         my $body = read_body_json();
         my $ids = $body->{ids};
-        fail('ids が配列ではありません') unless ref $ids eq 'ARRAY';
+        fail('ids_not_array') unless ref $ids eq 'ARRAY';
         # 配列の並び順で sort_order を 1..n に振り直す（本人の年表のみ）。
         my $sth = $dbh->prepare('UPDATE nenpyo SET sort_order=? WHERE id=? AND user_id=?');
         my $pos = 0;
@@ -507,12 +512,12 @@ eval {
     elsif ($action eq 'tag' && $method eq 'PUT') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
-        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
-        fail('not found', '404 Not Found')
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        fail('not_found', '404 Not Found')
             unless $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         my $body = read_body_json();
         my ($name, $color) = clean_tag($body);
-        fail('同じ名前の年表が既にあります', '409 Conflict')
+        fail('timeline_name_taken', '409 Conflict')
             if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=? AND id<>?', undef, $u->{id}, $name, $id);
         $dbh->do('UPDATE nenpyo SET name=?, color=? WHERE id=? AND user_id=?',
             undef, $name, $color, $id, $u->{id});
@@ -522,7 +527,7 @@ eval {
     elsif ($action eq 'tag' && $method eq 'DELETE') {
         my $u  = require_user($dbh);
         my $id = query_param('id');
-        fail('invalid id') unless defined $id && $id =~ /^\d+$/;
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
         $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }
@@ -573,11 +578,11 @@ eval {
         # 年表をフォローする。自分の年表はフォロー不可。
         my $u   = require_user($dbh);
         my $nid = read_body_json()->{nenpyo_id};
-        fail('invalid nenpyo_id') unless defined $nid && "$nid" =~ /^\d+$/;
+        fail('invalid_nenpyo_id') unless defined $nid && "$nid" =~ /^\d+$/;
         $nid = 0 + $nid;
         my $owner = $dbh->selectrow_array('SELECT user_id FROM nenpyo WHERE id=?', undef, $nid);
-        fail('not found', '404 Not Found') unless defined $owner;
-        fail('自分の年表はフォローできません') if $owner == $u->{id};
+        fail('not_found', '404 Not Found') unless defined $owner;
+        fail('cannot_follow_own') if $owner == $u->{id};
         $dbh->do('INSERT INTO follows (follower_user_id, nenpyo_id) VALUES (?,?) ON CONFLICT DO NOTHING',
             undef, $u->{id}, $nid);
         respond({ ok => JSON::PP::true });
@@ -585,15 +590,16 @@ eval {
     elsif ($action eq 'follow' && $method eq 'DELETE') {
         my $u   = require_user($dbh);
         my $nid = query_param('nenpyo_id');
-        fail('invalid nenpyo_id') unless defined $nid && $nid =~ /^\d+$/;
+        fail('invalid_nenpyo_id') unless defined $nid && $nid =~ /^\d+$/;
         $dbh->do('DELETE FROM follows WHERE follower_user_id=? AND nenpyo_id=?', undef, $u->{id}, 0 + $nid);
         respond({ ok => JSON::PP::true });
     }
     else {
-        fail('not found', '404 Not Found');
+        fail('not_found', '404 Not Found');
     }
     1;
 } or do {
     my $err = $@ || 'unknown error';
-    fail("server error: $err", '500 Internal Server Error');
+    warn "nenpyo api error: $err\n"; # 詳細はサーバーログへ。クライアントには汎用コードのみ返す。
+    fail('server_error', '500 Internal Server Error');
 };

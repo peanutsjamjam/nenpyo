@@ -1,5 +1,6 @@
 // nenpyo API クライアント。api.cgi (Perl + PostgreSQL) と通信する。
 // Cookie ベースのセッション認証なので credentials は same-origin。
+import i18n from './i18n'
 
 export type EventItem = {
   id: number
@@ -83,6 +84,16 @@ export type FollowedData = {
 
 const API = `${import.meta.env.BASE_URL}api.cgi`
 
+// サーバーが返すエラーコード（+補間 params）を現在の言語の文言へ翻訳する。
+// 未知コードはコードそのまま、params.field は field.* を引いて語に展開する。
+function translateError(code: unknown, params: unknown, status: number): string {
+  if (typeof code !== 'string') return i18n.t('errors.http', { status })
+  const p: Record<string, unknown> = (params && typeof params === 'object') ? { ...(params as object) } : {}
+  if (typeof p.field === 'string') p.field = i18n.t(`field.${p.field}`)
+  const msg = i18n.t(`errors.${code}`, p as Record<string, string | number>)
+  return msg === `errors.${code}` ? code : msg // 未知コードはそのまま
+}
+
 async function call<T>(method: string, action: string, opts: { id?: number; body?: unknown } = {}): Promise<T> {
   let url = `${API}?action=${action}`
   if (opts.id != null) url += `&id=${opts.id}`
@@ -95,8 +106,8 @@ async function call<T>(method: string, action: string, opts: { id?: number; body
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) {
-    const msg = data && typeof data === 'object' && 'error' in data ? (data as { error: string }).error : `エラー (${res.status})`
-    throw new Error(msg)
+    const d = (data && typeof data === 'object') ? data as { error?: unknown; params?: unknown } : {}
+    throw new Error(translateError(d.error, d.params, res.status))
   }
   return data as T
 }
