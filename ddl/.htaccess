@@ -1,0 +1,6 @@
+# ddl/ 内の .sql/.pl をブラウザでテキスト表示する（ダウンロードさせない）。
+# UserDir(開発)では AllowOverride FileInfo により AddType/AddCharset が有効。
+# 本番(AllowOverride All)でも同様に効く。※一覧表示(Options Indexes)はここでは指定しない
+#   （開発側は Options 上書き不可のため。一覧は dev=userderの既定、prod=vhostで有効化済み）。
+AddType text/plain .sql .pl
+AddCharset utf-8 .sql .pl
