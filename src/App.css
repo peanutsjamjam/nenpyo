@@ -130,8 +130,8 @@
    バー・タイトルより背面、他の縦線より前面（chart-grid 内の最後に置く）。 */
 .chart-now-line { position: absolute; top: 0; bottom: 0; min-width: 2px; background: #e23b3b; z-index: 1; pointer-events: none; }
 .chart-row { position: relative; z-index: 1; height: 34px; }
-/* 選択は行全体ではなく、実際の期間バーの周囲だけにリング表示する */
-.chart-row.selected .chart-bar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+/* 選択は実際の期間バーの周囲だけにリング表示する */
+.chart-bar.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .chart-track { position: relative; width: 100%; height: 100%; }
 .chart-bar {
   position: absolute; top: 50%; transform: translateY(-50%);

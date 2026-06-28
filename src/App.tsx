@@ -289,6 +289,23 @@ function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: numb
   return gridLines
 }
 
+// レーン詰め: イベントを「範囲が重ならないものは同じ行（レーン）にまとめる」ように配置する。
+// 開始座標の昇順に見て、最後の終端がこのイベントの開始以下になっている既存レーンへ入れる。
+// 入れられるレーンが無ければ新しいレーンを作る（=次の行）。
+function packLanesOf(events: EventItem[]): EventItem[][] {
+  const sorted = [...events].sort((a, b) => eventSpan(a).s - eventSpan(b).s)
+  const lanes: { end: number; items: EventItem[] }[] = []
+  for (const e of sorted) {
+    const { s, end } = eventSpan(e)
+    let placed = false
+    for (const lane of lanes) {
+      if (lane.end <= s) { lane.items.push(e); lane.end = end; placed = true; break }
+    }
+    if (!placed) lanes.push({ end, items: [e] })
+  }
+  return lanes.map((l) => l.items)
+}
+
 // イベント群の占有範囲（座標）。空なら null。
 function eventsExtent(events: EventDates[]): { min: number; max: number } | null {
   let min = Infinity, max = -Infinity
@@ -317,7 +334,7 @@ function textColorFor(hex: string): string {
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors }: {
+function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors, packLanes }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number | null) => void
@@ -333,6 +350,7 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
   zoomFactor: number
   centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
+  packLanes: boolean
 }) {
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -404,16 +422,25 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
     return () => el.removeEventListener('wheel', onWheel)
   }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor])
 
+  // レーン構成（行ごとのイベント配列）。packLanes off は 1イベント=1レーン。
+  const lanes = packLanes ? packLanesOf(events) : events.map((e) => [e])
+  // イベント id -> 行（レーン）番号。中央へ移動の縦スクロール計算に使う。
+  const laneIndexRef = useRef<Map<number, number>>(new Map())
+  const laneIndex = new Map<number, number>()
+  lanes.forEach((lane, i) => lane.forEach((e) => laneIndex.set(e.id, i)))
+  laneIndexRef.current = laneIndex
+
   // イベントリストからの「中央へ移動」リクエスト。横はイベント期間の中央を centerYear に、
   // 縦はその行を表示域の中央へスクロール（ズームは変えない）。バークリックでは発生しない。
   useEffect(() => {
     if (!centerRequest) return
-    const idx = events.findIndex((ev) => ev.id === centerRequest.id)
-    if (idx < 0) return
-    const { s, end } = eventSpan(events[idx])
+    const ev = events.find((x) => x.id === centerRequest.id)
+    if (!ev) return
+    const { s, end } = eventSpan(ev)
     setCenterYear(() => (s + end) / 2)
+    const row = laneIndexRef.current.get(centerRequest.id) ?? 0
     const el = scrollRef.current
-    if (el) el.scrollTop = Math.max(0, idx * ROW_PX + ROW_PX / 2 - el.clientHeight / 2)
+    if (el) el.scrollTop = Math.max(0, row * ROW_PX + ROW_PX / 2 - el.clientHeight / 2)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerRequest])
 
@@ -527,58 +554,60 @@ function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCe
             ))}
             {nowInView && <div className="chart-now-line" style={{ left: `${pct(nowPos)}%`, width: `${nowWidthFrac * 100}%`, background: `rgba(226, 59, 59, ${nowAlpha})` }} />}
           </div>
-          {/* 全イベントを常に1行ずつ表示（並び順固定）。バーが画面外でも行は残し、
-              タイトルは近い側の端に寄せて表示する。 */}
-          {events.map((e) => {
-            const { s, end } = eventSpan(e)
-            const left = pct(s)
-            const right = pct(end)
-            // バー要素の実描画範囲はビューポート±BAR_CLAMP% に収める（巨大要素対策）。
-            const barLeft = Math.max(left, -BAR_CLAMP)
-            const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
-            // 色はイベントが属する年表のもの。
-            const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
-            const title = e.title || t('common.untitled')
-            // バーが完全に画面外なら矢印で方向を示す
-            const offLeft = end < rangeStart
-            const offRight = s > rangeEnd
-            const labelText = offLeft ? `◀ ${title}` : offRight ? `${title} ▶` : title
-            // タイトルの中心位置: 基本はバー中央。ただしタイトル全体が画面内に収まるよう、
-            // また可能ならバーの範囲内に収まるよう左右に「貼り付く」（端で固定される）。
-            const halfPct = chartW > 0 ? (estLabelPx(labelText) / 2) / chartW * 100 : 0
-            const barCenter = (left + right) / 2
-            const lo = Math.max(halfPct, left + halfPct)        // 画面左端・バー左端より内側
-            const hi = Math.min(100 - halfPct, right - halfPct) // 画面右端・バー右端より内側
-            const labelLeft = lo <= hi
-              ? clamp(barCenter, lo, hi)
-              : clamp(barCenter, halfPct, 100 - halfPct)        // バーがタイトルより短いときは画面内に収めるだけ
-            const tip = `${title}（${formatRangeAD(e)}）`
-            return (
-              <div
-                className={e.id === selectedId ? 'chart-row selected' : 'chart-row'}
-                key={e.id}
-              >
-                <div className="chart-track">
-                  {/* 反応するのは期間バーとタイトルだけ。バー外の余白は無反応。 */}
-                  {!offLeft && !offRight && (
-                    <div
-                      className="chart-bar"
-                      style={{ left: `${barLeft}%`, width: `${barWidth}%`, ...(barColor ? { background: barColor } : {}) }}
-                      title={tip}
-                      onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
-                    />
-                  )}
-                  <span
-                    className="chart-bar-label"
-                    style={{ left: `${labelLeft}%` }}
-                    title={tip}
-                    onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
-                    onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
-                  >{labelText}</span>
-                </div>
+          {/* レーンごとに1行。通常は1行=1イベント、フラスコ1 ON 時は重ならない
+              イベントを同じ行にまとめる。バーが画面外でも行は残す。 */}
+          {lanes.map((lane, laneIdx) => (
+            <div className="chart-row" key={laneIdx}>
+              <div className="chart-track">
+                {lane.map((e) => {
+                  const { s, end } = eventSpan(e)
+                  const left = pct(s)
+                  const right = pct(end)
+                  // バー要素の実描画範囲はビューポート±BAR_CLAMP% に収める（巨大要素対策）。
+                  const barLeft = Math.max(left, -BAR_CLAMP)
+                  const barWidth = Math.max(0.4, Math.min(right, 100 + BAR_CLAMP) - barLeft)
+                  // 色はイベントが属する年表のもの。
+                  const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
+                  const title = e.title || t('common.untitled')
+                  // バーが完全に画面外なら矢印で方向を示す
+                  const offLeft = end < rangeStart
+                  const offRight = s > rangeEnd
+                  const labelText = offLeft ? `◀ ${title}` : offRight ? `${title} ▶` : title
+                  // タイトルの中心位置: 基本はバー中央。ただしタイトル全体が画面内に収まるよう、
+                  // また可能ならバーの範囲内に収まるよう左右に「貼り付く」（端で固定される）。
+                  const halfPct = chartW > 0 ? (estLabelPx(labelText) / 2) / chartW * 100 : 0
+                  const barCenter = (left + right) / 2
+                  const lo = Math.max(halfPct, left + halfPct)        // 画面左端・バー左端より内側
+                  const hi = Math.min(100 - halfPct, right - halfPct) // 画面右端・バー右端より内側
+                  const labelLeft = lo <= hi
+                    ? clamp(barCenter, lo, hi)
+                    : clamp(barCenter, halfPct, 100 - halfPct)        // バーがタイトルより短いときは画面内に収めるだけ
+                  const tip = `${title}（${formatRangeAD(e)}）`
+                  const sel = e.id === selectedId
+                  return (
+                    <span key={e.id}>
+                      {/* 反応するのは期間バーとタイトルだけ。バー外の余白は無反応。 */}
+                      {!offLeft && !offRight && (
+                        <div
+                          className={'chart-bar' + (sel ? ' selected' : '')}
+                          style={{ left: `${barLeft}%`, width: `${barWidth}%`, ...(barColor ? { background: barColor } : {}) }}
+                          title={tip}
+                          onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
+                        />
+                      )}
+                      <span
+                        className="chart-bar-label"
+                        style={{ left: `${labelLeft}%` }}
+                        title={tip}
+                        onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
+                        onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
+                      >{labelText}</span>
+                    </span>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1023,11 +1052,13 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
-  // 開発用フラスコボタン（実験用機能の割り当て先。今は何もしない）。
+  // 開発用フラスコ1: 期間バーをレーン詰め表示にするトグル。
+  const [packLanes, setPackLanes] = useState(false)
+  // 開発用フラスコボタン（実験用機能の割り当て先）。active と onClick を持つ。
   const devButtons = [
-    () => { /* フラスコ1: 未割り当て */ },
-    () => { /* フラスコ2: 未割り当て */ },
-    () => { /* フラスコ3: 未割り当て */ },
+    { active: packLanes, onClick: () => setPackLanes((v) => !v) },
+    { active: false, onClick: () => { /* フラスコ2: 未割り当て */ } },
+    { active: false, onClick: () => { /* フラスコ3: 未割り当て */ } },
   ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
   const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
@@ -1422,13 +1453,13 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
         </div>
         {DEV_BUTTON && (
           <div className="topbar-center">
-            {devButtons.map((fn, i) => (
+            {devButtons.map((b, i) => (
               <button
                 key={i}
-                className="icon-btn dev-btn"
+                className={'icon-btn dev-btn' + (b.active ? ' active' : '')}
                 title={`開発用フラスコ${i + 1}`}
                 disabled={showSettings}
-                onClick={fn}
+                onClick={b.onClick}
               >
                 <FlaskConical size={18} />
               </button>
@@ -1583,6 +1614,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 zoomFactor={settings.zoomFactor}
                 centerRequest={centerReq}
                 tagColors={tagColors}
+                packLanes={packLanes}
               />
             ) : (
               <div className="placeholder">
