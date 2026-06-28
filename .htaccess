@@ -1,6 +1,5 @@
 # 本番ビルド (dist/) を /~sugawara/nenpyo/ で透過的に配信する
 RewriteEngine On
-RewriteBase /~sugawara/nenpyo/
 
 # .cgi を CGI スクリプトとして実行
 AddHandler cgi-script .cgi

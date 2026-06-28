@@ -35,7 +35,13 @@ use MIME::Base64 ();
 #   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除
 
 my $COOKIE_NAME  = 'nenpyo_sid';
-my $COOKIE_PATH  = '/~sugawara/nenpyo/';
+# Cookie の Path は配信パスに合わせて自動判定する（環境ごとに固定値を持たない）。
+# SCRIPT_NAME から api.cgi を除いたディレクトリ部を使う。
+#   dev: /~sugawara/nenpyo/api.cgi -> /~sugawara/nenpyo/
+#   本番: /api.cgi               -> /
+my $COOKIE_PATH  = $ENV{SCRIPT_NAME} || '/';
+$COOKIE_PATH =~ s#/[^/]*$#/#;   # 末尾の "api.cgi" を取り除きディレクトリ部に
+$COOKIE_PATH = '/' if $COOKIE_PATH eq '';
 my $SESSION_DAYS = 30;
 my $PBKDF2_ITER  = 120000;
 

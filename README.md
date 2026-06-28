@@ -2,10 +2,13 @@
 
 ユーザーごとにログインし、自分だけの歴史年表（出来事の一覧）を作成・表示するWebアプリ。
 
-公開URL: **https://peanutsjamjam.jp/~sugawara/nenpyo/**
+公開URL: **https://nenpyo.peanutsjamjam.jp/**（本番）／ **https://peanutsjamjam.jp/~sugawara/nenpyo/**（開発）
 
-> ディレクトリ名・DB名ともに `nenpyo`（旧称 `testapp1` から改名済み）。配信サブパスを変えるときは
-> `vite.config.ts` の `base`、`.htaccess` の `RewriteBase`、`api.cgi` の `$COOKIE_PATH` を合わせて変更する。
+> 配信パス（サブパス/サブドメイン直下）に依存しない作りにしてある。配信パスは自動判定するので
+> 環境ごとの差分はない（dev/prod で同じファイル・同じビルドでよい）:
+> - `vite.config.ts` の `base` は相対 `'./'`（アセットは index.html からの相対参照）。
+> - `.htaccess` は `RewriteBase` を持たない。
+> - `api.cgi` の Cookie Path は `SCRIPT_NAME` から自動判定。
 
 ## 構成
 
