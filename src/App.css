@@ -38,7 +38,7 @@
 
 .list {
   width: 320px; flex-shrink: 0;
-  background: var(--panel-2); padding: 14px;
+  background: var(--panel-2); padding: 10px;
   display: flex; flex-direction: column; min-height: 0;
 }
 
@@ -47,7 +47,7 @@
 .splitter:hover, .splitter:active { background: var(--accent); }
 
 /* ---- エディタ ---- */
-.editor { flex: 1; min-width: 0; display: flex; padding: 24px 20px; overflow-y: auto; position: relative; }
+.editor { flex: 1; min-width: 0; display: flex; padding: 24px 10px; overflow-y: auto; position: relative; }
 
 
 /* 設定・編集パネルはメイン（年表）の上に重ねる。パネル外は透明で背後がそのまま見える。 */
