@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User, Download } from 'lucide-react'
 import { api, formatRangeAD, monthLabel, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
 import { useTranslation } from 'react-i18next'
 import i18n, { detectLang, type Lang } from './i18n'
@@ -1368,6 +1368,24 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     }
   }
 
+  // 年表とその所属イベントをテキストにしてダウンロードする。
+  const downloadTimeline = (tl: Tag) => {
+    const evs = eventsByTimeline.get(tl.id) ?? []
+    const lines: string[] = [tl.name, '='.repeat(20), '']
+    for (const e of evs) {
+      lines.push(`${formatRangeAD(e)}\t${e.title || t('common.untitled')}`)
+      if (e.detail) for (const dl of e.detail.split(/\r\n|\r|\n/)) lines.push('  ' + dl)
+      lines.push('')
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = (tl.name || 'timeline').replace(/[\/\\:*?"<>|]/g, '_') + '.txt'
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   // 年表の並びを上(-1)/下(+1)へ入れ替えて保存する
   const moveTimeline = async (id: number, dir: -1 | 1) => {
     const ids = timelines.map((t) => t.id)
@@ -1811,6 +1829,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         <button className="settings-close" onClick={() => moveTimeline(tl!.id, -1)} disabled={pi <= 0} title={t('common.moveUp')} aria-label={t('common.moveUp')}><ChevronUp size={18} /></button>
                         <button className="settings-close" onClick={() => moveTimeline(tl!.id, 1)} disabled={pi >= timelines.length - 1} title={t('common.moveDown')} aria-label={t('common.moveDown')}><ChevronDown size={18} /></button>
                       </>)}
+                      {!isAdd && (
+                        <button className="settings-close" onClick={() => downloadTimeline(tl!)} title={t('timeline.download')} aria-label={t('timeline.download')}><Download size={18} /></button>
+                      )}
                       {!isAdd && (
                         <button className="settings-close" onClick={() => setConfirmDeleteTagId(tl!.id)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={18} /></button>
                       )}

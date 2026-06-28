@@ -88,6 +88,7 @@ const resources = {
         pickColor: 'クリックで色を選ぶ',
         name: '年表名',
         confirmDelete: 'この年表を削除しますか？',
+        download: 'テキストでダウンロード',
       },
       chart: {
         selectHint: 'イベントを選択すると詳細を表示します',
@@ -236,6 +237,7 @@ const resources = {
         pickColor: 'Click to choose a color',
         name: 'Timeline name',
         confirmDelete: 'Delete this timeline?',
+        download: 'Download as text',
       },
       chart: {
         selectHint: 'Select an event to see details',
