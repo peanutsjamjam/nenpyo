@@ -4,7 +4,7 @@ import { formatRangeAD, type EventItem } from '../api'
 import { type WheelAction } from '../lib/settings'
 import { oneLine } from '../lib/format'
 import {
-  fracYear, eventSpan, buildGridLines, buildCenturyMarks, packLanesOf, packLanesSemiOf, type LaneMode,
+  fracYear, eventSpan, barEndClasses, buildGridLines, buildCenturyMarks, packLanesOf, packLanesSemiOf, type LaneMode,
   DAY, MIN_YEARS, MAX_YEARS, LABEL_FONT_PX, ROW_PX, MAX_GRID_LINES_AT_1000PX, NOW_FADE_PX, BAR_CLAMP,
 } from '../lib/timeline'
 
@@ -279,12 +279,14 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
                     : clamp(barCenter, halfPct, 100 - halfPct)        // バーがタイトルより短いときは画面内に収めるだけ
                   const tip = `${title}（${formatRangeAD(e)}）`
                   const sel = e.id === selectedId
+                  // 端の確定精度で見た目を変える（日=ガント風キャップ / 月=軽い角丸 / 年=丸）。
+                  const endCls = barEndClasses(e)
                   return (
                     <span key={e.id}>
                       {/* 反応するのは期間バーとタイトルだけ。バー外の余白は無反応。 */}
                       {!offLeft && !offRight && (
                         <div
-                          className={'chart-bar' + (sel ? ' selected' : '')}
+                          className={'chart-bar' + (sel ? ' selected' : '') + endCls}
                           style={{ left: `${barLeft}%`, width: `${barWidth}%`, ...(barColor ? { background: barColor } : {}) }}
                           title={tip}
                           onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}

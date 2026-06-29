@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { formatRangeAD, type ExploreTag, type ExploreEvent } from '../api'
 import { type WheelAction } from '../lib/settings'
 import {
-  fracYear, eventSpan, eventsExtent, buildGridLines, buildCenturyMarks, packLanesOf,
+  fracYear, eventSpan, barEndClasses, eventsExtent, buildGridLines, buildCenturyMarks, packLanesOf,
   MIN_YEARS, MAX_YEARS, ROW_PX, MAX_GRID_LINES_AT_1000PX, BAR_CLAMP,
 } from '../lib/timeline'
 
@@ -200,9 +200,10 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
                   const title = e.title || t('common.untitled')
                   const tip = `${title}（${formatRangeAD(e)}）`
                   const sel = e.id === selectedId
+                  const endCls = barEndClasses(e)
                   return (
                     <span key={e.id}>
-                      <div className={'chart-bar' + (sel ? ' selected' : '')} style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
+                      <div className={'chart-bar' + (sel ? ' selected' : '') + endCls} style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
                       <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
                     </span>
                   )

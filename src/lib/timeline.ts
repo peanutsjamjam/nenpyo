@@ -88,6 +88,29 @@ export function eventSpan(e: EventDates): { s: number; end: number } {
   return { s, end }
 }
 
+// 期間バーの端の見た目を、その端の確定精度で変える:
+//   年月日(day)   … ガント風の縦キャップ（角は直角）          -> cap-*
+//   年月(month)   … 軽い角丸                                  -> soft-*
+//   年のみ(year)  … 今までどおりの丸（既定）                  -> （クラスなし）
+//   継続中(flat)  … 角丸もキャップも使わないカチッとした四角  -> flat-*
+type EndStyle = 'day' | 'month' | 'year' | 'flat'
+function precisionOf(month: number | null, day: number | null): EndStyle {
+  return day != null ? 'day' : month != null ? 'month' : 'year'
+}
+// バーに付ける端スタイルのクラス名（先頭スペース付き）を返す。
+//   左端=開始 / 右端=終了。終了なし（単発）は開始の1単位ぶんなので開始の精度で判定。
+//   「継続中」の右端は現在位置であり確定した終端ではないので、四角(flat)で表す。
+export function barEndClasses(e: EventDates): string {
+  const start = precisionOf(e.start_month, e.start_day)
+  let end: EndStyle
+  if (e.ongoing) end = 'flat'
+  else if (e.end_year != null) end = precisionOf(e.end_month, e.end_day)
+  else end = start
+  const cls = (side: 'start' | 'end', p: EndStyle) =>
+    p === 'day' ? ` cap-${side}` : p === 'month' ? ` soft-${side}` : p === 'flat' ? ` flat-${side}` : ''
+  return cls('start', start) + cls('end', end)
+}
+
 export type GridLine = { left: number; major: boolean; bottomLabel: string }
 // 上バーの「バンドラベル」（最上段の世紀、2段目の年/月）。バンドの開始位置に置き、
 // 開始が画面左に消えていても、その先頭は左端に貼り付けて「今どのバンドか」を示す。

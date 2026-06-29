@@ -161,6 +161,22 @@
 }
 /* 反応するのはバーの上だけ。かすかに明るくする。 */
 .chart-bar:hover { filter: brightness(1.1); }
+/* 年月日まで確定している端だけ、ガント風の縦キャップにする（その端の角は直角に）。
+   年のみ・年月の端は border-radius:13px のまま（丸い）。 */
+.chart-bar.cap-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.chart-bar.cap-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.chart-bar.cap-start::before, .chart-bar.cap-end::after {
+  content: ''; position: absolute; top: -2px; bottom: -2px; width: 3px;
+  background: rgba(0, 0, 0, 0.5); border-radius: 1px; pointer-events: none;
+}
+.chart-bar.cap-start::before { left: 0; }
+.chart-bar.cap-end::after { right: 0; }
+/* 端の精度が年月のときは、軽い角丸にする（年のみは既定の丸 13px のまま）。 */
+.chart-bar.soft-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.chart-bar.soft-end { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+/* 継続中(ongoing)の端は、角丸もキャップも使わずカチッとした直角の四角にする。 */
+.chart-bar.flat-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.chart-bar.flat-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 
 /* 期間バーに被せて中央に表示するタイトル。バー上でも背景上でも読めるよう縁取り */
 .chart-bar-label {
