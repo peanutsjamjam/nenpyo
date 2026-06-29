@@ -6,7 +6,7 @@ import i18n, { detectLang, type Lang } from './i18n'
 import './App.css'
 
 // 開発用ボタンの表示フラグ。本番で隠す／不要になったら false に（または削除）。
-const DEV_BUTTON = true
+const DEV_BUTTON = import.meta.env.DEV   // 開発時のみ表示（本番ビルドでは自動的に消える）
 
 // ---- ユーザー設定（ブラウザの localStorage に保存。端末ごと） ----------------
 type Theme = 'light' | 'dark'

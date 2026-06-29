@@ -19,7 +19,7 @@
 api.cgi (Perl CGI, suexec で sugawara 実行)
    │  DBI / DBD::Pg (peer 認証・パスワード不要)
    ▼
-PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events / follows)
+PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events)
 ```
 
 - **フロント**: Vite + React + TypeScript。`dist/` に本番ビルド。

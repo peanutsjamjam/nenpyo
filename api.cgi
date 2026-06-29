@@ -11,7 +11,7 @@ use MIME::Base64 ();
 #
 # 配信:  Apache UserDir 配下、suexec で sugawara として実行される。
 #        そのため PostgreSQL へは peer 認証（パスワード不要）で接続できる。
-# DB:    nenpyo（users / sessions / events）。定義は ddl/*.sql 参照。
+# DB:    nenpyo（users / sessions / nenpyo / events）。定義は ddl/*.sql 参照。
 # 認証:  ログイン時にランダムトークンを sessions に保存し、HttpOnly Cookie
 #        (nenpyo_sid) で受け渡す。パスワードは PBKDF2-HMAC-SHA256 で保存。
 #
