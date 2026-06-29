@@ -560,16 +560,21 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
                         onChange={() => toggleTimelineVisible(tl.id)}
                         title={t('sidebar.showInMain')}
                       />
-                      <span className="tag-name" style={{ background: tl.color, color: textColorFor(tl.color) }}>{tl.name}</span>
-                      {isVirtual && (
-                        tl.virtual_dead
-                          ? <span className="tag-owner tag-dead" title={t('sidebar.followDeleted')}>{t('sidebar.deleted')}</span>
-                          : <span className="tag-owner" title={t('sidebar.followedFrom', { owner: tl.owner ?? '?' })}><LinkIcon size={11} />@{tl.owner}</span>
-                      )}
+                      <span className="tag-name" style={{ background: tl.color, color: textColorFor(tl.color) }}>
+                        <span className="tag-name-text">{tl.name}</span>
+                        {isVirtual && (
+                          tl.virtual_dead
+                            ? <span className="tag-owner tag-dead" title={t('sidebar.followDeleted')}>{t('sidebar.deleted')}</span>
+                            : <span className="tag-owner" title={t('sidebar.followedFrom', { owner: tl.owner ?? '?' })}><LinkIcon size={11} />@{tl.owner}</span>
+                        )}
+                      </span>
                       <span className="tag-count">{t('common.itemCount', { n: tEvents.length })}</span>
                       <button className="tag-icon-btn" title={t('sidebar.editTimeline')} onClick={() => startEditTag(tl)}><Pencil size={15} /></button>
-                      {!isVirtual && (
+                      {!isVirtual ? (
                         <button className="tag-icon-btn" title={t('sidebar.addEventHere')} onClick={() => { setExpandedTimelines((p) => new Set(p).add(tl.id)); startNew(tl.id) }}><Plus size={15} /></button>
+                      ) : (
+                        // フォロー年表は「＋」が無いので、同じ幅の空要素で鉛筆の位置を他の年表と揃える。
+                        <span className="tag-icon-spacer" aria-hidden="true" />
                       )}
                     </div>
                     {open && tEvents.length > 0 && (

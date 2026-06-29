@@ -329,6 +329,8 @@
 }
 .list-add-btn:hover, .tag-icon-btn:not(:disabled):hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .tag-icon-btn:disabled { opacity: 0.3; cursor: default; }
+/* 「＋」ボタンが無いフォロー年表で、鉛筆アイコンの位置を他の年表と揃えるための空きスペース */
+.tag-icon-spacer { width: 26px; flex-shrink: 0; }
 
 /* 左サイドバー: 各エリア（イベント/Primeタグ/タグ）。高さは flex-grow 比で配分し、
    中の一覧だけがスクロールする。畳むと見出しぶんだけの高さになる。 */
@@ -348,14 +350,18 @@
 /* 入力中の見本: クリックで色を選べる（= prime にする）。四角全体を当たり判定に。 */
 .tag-swatch-pick { position: relative; padding: 0; cursor: pointer; }
 .tag-swatch-pick input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; cursor: pointer; }
-/* 年表名: 背景をその年表の色にしたチップ（色は inline で指定） */
-.tag-name { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 10px; border-radius: 6px; }
+/* 年表名: 背景をその年表の色にしたチップ（色は inline で指定）。
+   内側に名前(左・省略あり)とフォロー所有者バッジ(右寄せ)を並べる。 */
+.tag-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 17px; padding: 3px 10px; border-radius: 6px; }
+.tag-name-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* メイン領域への表示チェックボックス */
 .tl-visible { flex: 0 0 auto; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 /* 年表項目: 所属イベント件数 */
-.tag-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
-/* フォロー中の年表: 所有者名バッジ */
-.tag-owner { flex: 0 0 auto; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 2px; }
+/* 件数は桁数で幅が変わると左隣の色付きタグ名の右端がガタつくため、3桁＋単位が収まる幅で固定し右寄せにする。 */
+.tag-count { flex: 0 0 auto; width: 3.4em; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* フォロー中の年表: 所有者名バッジ。色付きバーの内側に右寄せで置くので、文字色はバーの
+   コントラスト色(tag-name から継承)を使い、少しだけ控えめにする。 */
+.tag-owner { flex: 0 0 auto; font-size: 12px; color: inherit; opacity: 0.85; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 .tag-dead { font-style: italic; opacity: 0.8; }
 /* サイドバーの「フォロー中」区切りラベル */
 .tl-section-label { list-style: none; margin: 12px 0 4px; padding: 4px 2px 0; border-top: 1px solid var(--border); font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
