@@ -8,6 +8,19 @@ export const WHEEL_ACTIONS: WheelAction[] = ['scroll', 'pan', 'zoom', 'none']
 // 拡大縮小の倍率（1ノッチあたり）の選択肢
 export const ZOOM_FACTORS = [1.05, 1.1, 1.2, 1.3, 1.5]
 
+// 行の高さ（px）。期間バー1本ぶんの行の高さ。
+export const ROW_HEIGHT = { min: 16, max: 64, def: 34, step: 2 }
+export function clampRowHeight(h: number): number {
+  if (!Number.isFinite(h)) return ROW_HEIGHT.def
+  return Math.min(ROW_HEIGHT.max, Math.max(ROW_HEIGHT.min, Math.round(h)))
+}
+// 期間バーの太さ（px）。行の高さに収まる範囲で可変にする（上限は行の高さ）。
+export const BAR_HEIGHT = { min: 6, max: ROW_HEIGHT.max, def: 26, step: 2 }
+export function clampBarHeight(h: number): number {
+  if (!Number.isFinite(h)) return BAR_HEIGHT.def
+  return Math.min(BAR_HEIGHT.max, Math.max(BAR_HEIGHT.min, Math.round(h)))
+}
+
 export type AppSettings = {
   theme: Theme
   lang: Lang
@@ -17,6 +30,8 @@ export type AppSettings = {
   wheelCtrl: WheelAction
   zoomFactor: number
   moveClickedIntoView: boolean
+  barHeight: number
+  rowHeight: number
 }
 
 export const SETTINGS_KEY = 'nenpyo-settings'
@@ -31,6 +46,8 @@ export function loadSettings(): AppSettings {
     wheelCtrl: 'zoom',
     zoomFactor: 1.2,
     moveClickedIntoView: false,
+    barHeight: BAR_HEIGHT.def,
+    rowHeight: ROW_HEIGHT.def,
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)

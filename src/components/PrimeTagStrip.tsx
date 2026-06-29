@@ -4,13 +4,13 @@ import { formatRangeAD, type ExploreTag, type ExploreEvent } from '../api'
 import { type WheelAction } from '../lib/settings'
 import {
   fracYear, eventSpan, barEndClasses, eventsExtent, buildGridLines, buildCenturyMarks, packLanesOf,
-  MIN_YEARS, MAX_YEARS, ROW_PX, MAX_GRID_LINES_AT_1000PX, BAR_CLAMP,
+  MIN_YEARS, MAX_YEARS, MAX_GRID_LINES_AT_1000PX, BAR_CLAMP,
 } from '../lib/timeline'
 
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes }: {
+export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes, rowHeight }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
@@ -24,6 +24,7 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
   zoomFactor: number
   invertZoom: boolean
   packLanes: boolean
+  rowHeight: number
 }) {
   const { t } = useTranslation()
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -179,7 +180,7 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
           ))}
         </div>
       </div>
-      <div className="strip-body" ref={bodyRef} style={{ height: rowsVisible * ROW_PX }}>
+      <div className="strip-body" ref={bodyRef} style={{ height: rowsVisible * rowHeight }}>
         <div className="strip-content">
           <div className="chart-grid">
             {gridLines.map((g, i) => (

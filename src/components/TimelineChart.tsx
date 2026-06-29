@@ -5,7 +5,7 @@ import { type WheelAction } from '../lib/settings'
 import { oneLine } from '../lib/format'
 import {
   fracYear, eventSpan, barEndClasses, buildGridLines, buildCenturyMarks, packLanesOf, packLanesSemiOf, type LaneMode,
-  DAY, MIN_YEARS, MAX_YEARS, LABEL_FONT_PX, ROW_PX, MAX_GRID_LINES_AT_1000PX, NOW_FADE_PX, BAR_CLAMP,
+  DAY, MIN_YEARS, MAX_YEARS, LABEL_FONT_PX, MAX_GRID_LINES_AT_1000PX, NOW_FADE_PX, BAR_CLAMP,
 } from '../lib/timeline'
 
 // ---- 期間バーによる年表表示（項目未選択時にメイン画面へ表示） ----------------
@@ -13,7 +13,7 @@ import {
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors, laneMode }: {
+export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors, laneMode, rowHeight }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number | null) => void
@@ -30,6 +30,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
   centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
   laneMode: LaneMode
+  rowHeight: number
 }) {
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -124,7 +125,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
     setCenterYear(() => (s + end) / 2)
     const row = laneIndexRef.current.get(centerRequest.id) ?? 0
     const el = scrollRef.current
-    if (el) el.scrollTop = Math.max(0, row * ROW_PX + ROW_PX / 2 - el.clientHeight / 2)
+    if (el) el.scrollTop = Math.max(0, row * rowHeight + rowHeight / 2 - el.clientHeight / 2)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerRequest])
 
@@ -233,7 +234,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
         onClick={() => onSelect(null)}
       >
         {/* 下端に「ビューポート高さ − 1行」の余白を足し、最下段のバーも画面最上部まで上げられるようにする */}
-        <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - ROW_PX) }}>
+        <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - rowHeight) }}>
           <div className="chart-grid">
             {gridLines.map((g, i) => (
               <div

@@ -1,15 +1,29 @@
+import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { type Lang } from '../i18n'
-import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS } from '../lib/settings'
+import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT } from '../lib/settings'
+
+export type SettingsTab = 'appearance' | 'account'
 
 // ---- 設定画面（メイン領域に表示） ------------------------------------------
-export function SettingsPanel({ settings, setSettings, onClose }: {
+// 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」はブラウザ
+// (localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
+// どのタブを開くかは呼び出し側が決める（歯車→表示 / ユーザー名→アカウント）。
+export function SettingsPanel({ settings, setSettings, onClose, username, tab, onTabChange }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
+  username: string
+  tab: SettingsTab
+  onTabChange: (t: SettingsTab) => void
 }) {
   const { t } = useTranslation()
+  // アカウント欄の入力（保存処理は今後実装。今は入力状態の保持のみ）。
+  const [accEmail, setAccEmail] = useState('')
+  const [accBio, setAccBio] = useState('')
+  const [accNewPw, setAccNewPw] = useState('')
+  const [accNewPw2, setAccNewPw2] = useState('')
   // どの修飾キーにも「拡大縮小」が割り当てられていなければ、倍率・反転は無効化
   const zoomUsed = settings.wheelPlain === 'zoom' || settings.wheelShift === 'zoom' || settings.wheelCtrl === 'zoom'
   return (
@@ -19,6 +33,12 @@ export function SettingsPanel({ settings, setSettings, onClose }: {
         <button className="settings-close" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
       </div>
 
+      <div className="settings-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'account'} className={tab === 'account' ? 'active' : ''} onClick={() => onTabChange('account')}>{t('settings.tabAccount')}</button>
+        <button role="tab" aria-selected={tab === 'appearance'} className={tab === 'appearance' ? 'active' : ''} onClick={() => onTabChange('appearance')}>{t('settings.tabAppearance')}</button>
+      </div>
+
+      {tab === 'appearance' ? (<>
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.language')}</h3>
         <div className="settings-section-body">
@@ -54,6 +74,43 @@ export function SettingsPanel({ settings, setSettings, onClose }: {
             </button>
           ))}
         </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.rowHeight')}</h3>
+        <div className="settings-section-body">
+          <div className="bar-height-row">
+            <input
+              type="range"
+              min={ROW_HEIGHT.min}
+              max={ROW_HEIGHT.max}
+              step={ROW_HEIGHT.step}
+              value={settings.rowHeight}
+              // 行を縮めたらバーも行に収まるよう同時に詰める。
+              onChange={(e) => { const rh = Number(e.target.value); setSettings((s) => ({ ...s, rowHeight: rh, barHeight: Math.min(s.barHeight, rh) })) }}
+            />
+            <span className="bar-height-value">{settings.rowHeight}px</span>
+            <span className="bar-height-preview row-preview" style={{ height: `${settings.rowHeight}px` }} />
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.barHeight')}</h3>
+        <div className="settings-section-body">
+          <div className="bar-height-row">
+            <input
+              type="range"
+              min={BAR_HEIGHT.min}
+              max={settings.rowHeight}
+              step={BAR_HEIGHT.step}
+              value={Math.min(settings.barHeight, settings.rowHeight)}
+              onChange={(e) => setSettings((s) => ({ ...s, barHeight: Number(e.target.value) }))}
+            />
+            <span className="bar-height-value">{Math.min(settings.barHeight, settings.rowHeight)}px</span>
+            <span className="bar-height-preview" style={{ height: `${Math.min(settings.barHeight, settings.rowHeight)}px`, borderRadius: `${Math.min(settings.barHeight, settings.rowHeight) / 2}px` }} />
+          </div>
         </div>
       </section>
 
@@ -121,6 +178,38 @@ export function SettingsPanel({ settings, setSettings, onClose }: {
       </section>
 
       <p className="settings-note">{t('settings.savedNote')}</p>
+      </>) : (<>
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.account.username')}</h3>
+        <div className="settings-section-body">
+          <input className="account-input" value={username} readOnly />
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.account.email')}</h3>
+        <div className="settings-section-body">
+          <input className="account-input" type="email" value={accEmail} onChange={(e) => setAccEmail(e.target.value)} autoComplete="email" />
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.account.changePassword')}</h3>
+        <div className="settings-section-body">
+          <input className="account-input" type="password" placeholder={t('settings.account.newPassword')} value={accNewPw} onChange={(e) => setAccNewPw(e.target.value)} autoComplete="new-password" />
+          <input className="account-input" type="password" placeholder={t('settings.account.confirmPassword')} value={accNewPw2} onChange={(e) => setAccNewPw2(e.target.value)} autoComplete="new-password" />
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.account.bio')}</h3>
+        <div className="settings-section-body">
+          <textarea className="account-input account-bio" value={accBio} onChange={(e) => setAccBio(e.target.value)} maxLength={1000} />
+        </div>
+      </section>
+
+      <p className="settings-note">{t('settings.account.note')}</p>
+      </>)}
     </div>
   )
 }

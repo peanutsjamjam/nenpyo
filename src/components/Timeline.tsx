@@ -3,11 +3,11 @@ import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp,
 import { useTranslation } from 'react-i18next'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from '../api'
 import i18n from '../i18n'
-import { type AppSettings, loadSettings, SETTINGS_KEY } from '../lib/settings'
+import { type AppSettings, loadSettings, SETTINGS_KEY, clampBarHeight, clampRowHeight } from '../lib/settings'
 import { fracYear, type LaneMode } from '../lib/timeline'
 import { textColorFor } from '../lib/format'
 import { TimelineChart } from './TimelineChart'
-import { SettingsPanel } from './SettingsPanel'
+import { SettingsPanel, type SettingsTab } from './SettingsPanel'
 import { Explorer } from './Explorer'
 
 // 開発用ボタンの表示フラグ。本番ビルドでは自動的に消える（不要になったら削除）。
@@ -85,7 +85,13 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
   const [showExplorer, setShowExplorer] = useState(false)
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
+  // 設定画面で最初に開くタブ（歯車→表示 / ユーザー名→アカウント）。
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance')
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  // 歯車: 「表示」タブで設定を開く（開いていれば閉じる）。
+  const openAppearance = () => { if (showSettings) setShowSettings(false); else { setSettingsTab('appearance'); setShowSettings(true) } }
+  // ユーザー名: 「アカウント」タブで設定を開く。
+  const openAccount = () => { setSettingsTab('account'); setShowSettings(true) }
 
   // 左サイドバーの幅（ドラッグで変更、localStorage に保存）
   const SIDEBAR_KEY = 'nenpyo-sidebar-width'
@@ -120,6 +126,8 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
     window.addEventListener('mouseup', onUp)
   }
 
+  // 行の高さ（設定値。バーの位置計算・帯の高さに使う。CSS 変数とも一致させる）。
+  const rowH = clampRowHeight(settings.rowHeight)
   // nenpyo_id -> 色 の対応（期間バー・ドットの着色）。仮想年表も自分の行なので色を持つ。
   const tagColors = new Map<number, string>()
   for (const t of tags) tagColors.set(t.id, t.color)
@@ -147,6 +155,11 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme)
     document.documentElement.lang = settings.lang
+    // 行の高さ・期間バーの太さを CSS 変数で全バー（メイン・エクスプローラー）へ反映。
+    // バーは行の高さを超えないよう収める。
+    const rh = clampRowHeight(settings.rowHeight)
+    document.documentElement.style.setProperty('--row-h', `${rh}px`)
+    document.documentElement.style.setProperty('--bar-h', `${Math.min(clampBarHeight(settings.barHeight), rh)}px`)
     if (i18n.language !== settings.lang) i18n.changeLanguage(settings.lang)
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* 無視 */ }
   }, [settings])
@@ -522,8 +535,8 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
           </div>
         )}
         <div className="topbar-right">
-          <span className="who">{username}</span>
-          <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={() => setShowSettings((v) => !v)}><Settings size={18} /></button>
+          <button className="who" title={t('settings.tabAccount')} onClick={openAccount}>{username}</button>
+          <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={openAppearance}><Settings size={18} /></button>
           <button className="icon-btn" title={t('nav.logout')} onClick={logout}><LogOut size={18} /></button>
         </div>
       </header>
@@ -622,6 +635,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
                 zoomFactor={settings.zoomFactor}
                 invertZoom={settings.invertZoom}
                 packLanes={stripPacked}
+                rowHeight={rowH}
               />
             ) : events.length > 0 ? (
               <TimelineChart
@@ -641,6 +655,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
                 centerRequest={centerReq}
                 tagColors={tagColors}
                 laneMode={laneMode}
+                rowHeight={rowH}
               />
             ) : (
               <div className="placeholder">
@@ -787,6 +802,9 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
               settings={settings}
               setSettings={setSettings}
               onClose={() => setShowSettings(false)}
+              username={username}
+              tab={settingsTab}
+              onTabChange={setSettingsTab}
             />
           </div>
         )}

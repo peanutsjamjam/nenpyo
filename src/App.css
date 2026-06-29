@@ -13,7 +13,9 @@
 /* 開発用フラスコ（3つ）は画面の左右中央に横並びで配置 */
 .topbar-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
-.who { color: var(--muted); font-size: 14px; }
+/* ユーザー名: クリックで設定の「アカウント」タブを開くボタン */
+.who { border: none; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.who:hover { color: var(--text); background: var(--accent-soft); }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
@@ -55,8 +57,9 @@
   position: absolute; inset: 0; z-index: 20;
   display: flex; align-items: flex-start; justify-content: flex-start; padding: 16px;
 }
-/* 設定オーバーレイ: body 全体（サイドバー＋メイン）を覆い、背後の操作を遮断する */
-.settings-blocker { z-index: 40; background: rgba(0,0,0,0.08); }
+/* 設定オーバーレイ: body 全体（サイドバー＋メイン）を覆い、背後の操作を遮断する。
+   設定パネルは左右中央に置く（上下は panel-overlay の flex-start のまま）。 */
+.settings-blocker { z-index: 40; background: rgba(0,0,0,0.08); justify-content: center; }
 .placeholder { margin: auto; text-align: center; color: var(--muted); max-width: 320px; line-height: 1.7; }
 .placeholder svg { color: var(--border); margin-bottom: 12px; }
 
@@ -151,13 +154,14 @@
 /* 現在日時の帯（赤）。幅はその時のスケールでの「1日」ぶん（インラインで指定、最小2px）。
    バー・タイトルより背面、他の縦線より前面（chart-grid 内の最後に置く）。 */
 .chart-now-line { position: absolute; top: 0; bottom: 0; min-width: 2px; background: #e23b3b; z-index: 1; pointer-events: none; }
-.chart-row { position: relative; z-index: 1; height: 34px; }
+.chart-row { position: relative; z-index: 1; height: var(--row-h, 34px); }
 /* 選択は実際の期間バーの周囲だけにリング表示する */
 .chart-bar.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 .chart-track { position: relative; width: 100%; height: 100%; }
 .chart-bar {
   position: absolute; top: 50%; transform: translateY(-50%);
-  height: 26px; min-width: 6px; border-radius: 13px; background: var(--accent); cursor: pointer;
+  height: var(--bar-h, 26px); min-width: 6px; border-radius: calc(var(--bar-h, 26px) / 3);
+  background: var(--accent); cursor: pointer;
 }
 /* 反応するのはバーの上だけ。かすかに明るくする。 */
 .chart-bar:hover { filter: brightness(1.1); }
@@ -280,6 +284,21 @@
   border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 24px;
 }
 .settings-title { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); }
+/* 期間バーの太さ設定: スライダー＋px表示＋プレビュー */
+.bar-height-row { display: flex; align-items: center; gap: 12px; }
+.bar-height-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); cursor: pointer; }
+.bar-height-value { flex: 0 0 auto; width: 3.5em; text-align: right; font-size: 14px; color: var(--muted); }
+.bar-height-preview { flex: 0 0 auto; width: 80px; background: var(--accent); }
+/* 行の高さプレビューは塗りではなく枠で示す（バーの太さプレビューと区別） */
+.row-preview { background: transparent; border: 1px solid var(--border); border-radius: 4px; }
+/* アカウントタブの入力欄 */
+.account-input { width: 100%; }
+.account-input + .account-input { margin-top: 8px; }
+.account-bio { min-height: 80px; resize: vertical; line-height: 1.5; }
+/* 設定画面のタブ（表示 / アカウント）。見た目はログインのタブに合わせる。 */
+.settings-tabs { display: flex; gap: 6px; background: var(--panel-2); border-radius: 10px; padding: 4px; margin-bottom: 24px; }
+.settings-tabs button { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 7px; font-size: 14px; color: var(--muted); font-weight: 600; cursor: pointer; }
+.settings-tabs button.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .settings-close {
   display: inline-flex; align-items: center; justify-content: center;
   padding: 6px 14px; font-size: 14px; color: var(--text);

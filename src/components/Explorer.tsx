@@ -7,7 +7,7 @@ import { oneLine } from '../lib/format'
 import { PrimeTagStrip } from './PrimeTagStrip'
 
 // ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
-export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes }: {
+export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes, rowHeight }: {
   onClose: () => void
   username: string
   onFollowChange?: () => void
@@ -17,6 +17,7 @@ export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelS
   zoomFactor: number
   invertZoom: boolean
   packLanes: boolean
+  rowHeight: number
 }) {
   const { t } = useTranslation()
   const [strips, setStrips] = useState<ExploreTag[] | null>(null)
@@ -72,6 +73,7 @@ export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelS
               zoomFactor={zoomFactor}
               invertZoom={invertZoom}
               packLanes={packLanes}
+              rowHeight={rowHeight}
             />
           ))}
         </div>
