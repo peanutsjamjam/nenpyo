@@ -1,6 +1,7 @@
 // nenpyo API クライアント。api.cgi (Perl + PostgreSQL) と通信する。
 // Cookie ベースのセッション認証なので credentials は same-origin。
 import i18n from './i18n'
+import { daysInMonth } from './lib/calendar'
 
 export type EventItem = {
   id: number
@@ -158,14 +159,7 @@ export function formatDateAD(year: number, month: number | null, day: number | n
 
 export type ParsedDate = { year: number | null; month: number | null; day: number | null }
 
-// うるう年判定（1582年より前はユリウス暦、以降はグレゴリオ暦）と月の日数（入力検証用）。
-function isLeap(year: number): boolean {
-  if (year < 1582) return year % 4 === 0 // ユリウス暦
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 // グレゴリオ暦
-}
-function daysInMonth(year: number, month: number): number {
-  return [31, isLeap(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
-}
+// 月の日数の検証は lib/calendar の暦実装（ユリウス/グレゴリオ）を共有して使う。
 
 // テキストを年月日に解析する。
 //   空文字       -> 日付なし (year=null)
