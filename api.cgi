@@ -29,10 +29,9 @@ use MIME::Base64 ();
 #   PUT    ?action=tag&id=<id>    {name,color}     -> 年表更新
 #   DELETE ?action=tag&id=<id>                     -> 年表削除
 #   POST   ?action=tags_reorder  {ids:[..]}        -> 年表の並び順を配列順に更新
-#   GET    ?action=follows                         -> フォロー中の年表一覧（所有者名つき）
-#   GET    ?action=followed                        -> フォロー中の年表＋そのイベント（読み取り用）
-#   POST   ?action=follow    {nenpyo_id}           -> 年表をフォロー（自分のは不可）
-#   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除
+#   POST   ?action=follow    {nenpyo_id}           -> 年表をフォロー（name/color をコピーした仮想年表を作成）
+#   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除（その仮想年表行を削除）
+#   （フォロー中の年表は tags / events に仮想年表として混ざって返る。専用 follows/followed は廃止）
 
 my $COOKIE_NAME  = 'nenpyo_sid';
 # Cookie の Path は配信パスに合わせて自動判定する（環境ごとに固定値を持たない）。
@@ -299,8 +298,9 @@ sub event_json {
         detail      => $r->{detail},
         nenpyo_id   => numornull($r->{nenpyo_id}),
         ongoing     => pgbool($r->{ongoing}),
-        created     => 0 + $r->{created},
-        updated     => 0 + $r->{updated},
+        readonly    => ($r->{readonly} ? JSON::PP::true : JSON::PP::false), # フォロー取込みは編集不可
+        created     => 0 + ($r->{created} // 0),
+        updated     => 0 + ($r->{updated} // 0),
     };
 }
 
@@ -324,7 +324,27 @@ sub tag_json {
         name  => $r->{name},
         color => $r->{color},
         sort_order => 0 + ($r->{sort_order} // 0),
+        virtual_nenpyo_id => numornull($r->{virtual_nenpyo_id}), # フォロー取込みなら先 id、自分の年表は null
+        virtual_dead => ($r->{virtual_dead} ? JSON::PP::true : JSON::PP::false), # フォロー先が削除済み
+        owner => $r->{owner}, # フォロー先の所有者名（自分の年表・削除済みは null）
     };
+}
+
+# 年表一覧（自分の全行＝普通年表＋フォロー取込み）。virtual_dead/owner も付ける。
+sub list_tags_json {
+    my ($dbh, $user_id) = @_;
+    my $rows = $dbh->selectall_arrayref(
+        'SELECT n.id, n.name, n.color, n.sort_order, n.virtual_nenpyo_id,
+                (n.virtual_nenpyo_id IS NOT NULL AND t.id IS NULL) AS virtual_dead,
+                ou.username AS owner
+           FROM nenpyo n
+           LEFT JOIN nenpyo t ON t.id = n.virtual_nenpyo_id
+           LEFT JOIN users  ou ON ou.id = t.user_id
+          WHERE n.user_id = ?
+          ORDER BY n.sort_order, n.id',
+        { Slice => {} }, $user_id
+    );
+    return [ map { tag_json($_) } @$rows ];
 }
 
 # ---- ルーティング ----------------------------------------------------------
@@ -400,12 +420,31 @@ eval {
     }
     elsif ($action eq 'events' && $method eq 'GET') {
         my $u = require_user($dbh);
-        my $rows = $dbh->selectall_arrayref(
-            "SELECT $EVENT_COLS FROM events WHERE user_id = ?
-              ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id",
+        # 自分のイベント（編集可）。
+        my $own = $dbh->selectall_arrayref(
+            "SELECT $EVENT_COLS, FALSE AS readonly FROM events WHERE user_id = ?",
             { Slice => {} }, $u->{id}
         );
-        respond([ map { event_json($_) } @$rows ]);
+        # フォロー取込み（仮想年表）のイベント。フォロー先のイベントを、自分の仮想年表 id に
+        # 付け替えて読み取り専用で混ぜる。フォロー先が削除済みなら何も出ない。
+        my $virt = $dbh->selectall_arrayref(
+            "SELECT e.id, e.start_year, e.start_month, e.start_day,
+                    e.end_year, e.end_month, e.end_day, e.title, e.detail,
+                    n.id AS nenpyo_id, e.ongoing, TRUE AS readonly,
+                    extract(epoch FROM e.created_at)::bigint AS created,
+                    extract(epoch FROM e.updated_at)::bigint AS updated
+               FROM nenpyo n
+               JOIN events e ON e.nenpyo_id = n.virtual_nenpyo_id
+              WHERE n.user_id = ? AND n.virtual_nenpyo_id IS NOT NULL",
+            { Slice => {} }, $u->{id}
+        );
+        my @all = sort {
+               $a->{start_year} <=> $b->{start_year}
+            || ($a->{start_month} // -1) <=> ($b->{start_month} // -1)
+            || ($a->{start_day}   // -1) <=> ($b->{start_day}   // -1)
+            || $a->{id} <=> $b->{id}
+        } (@$own, @$virt);
+        respond([ map { event_json($_) } @all ]);
     }
     elsif ($action eq 'event' && $method eq 'POST') {
         my $u = require_user($dbh);
@@ -449,17 +488,15 @@ eval {
     }
     elsif ($action eq 'tags' && $method eq 'GET') {
         my $u = require_user($dbh);
-        my $rows = $dbh->selectall_arrayref(
-            'SELECT id, name, color, sort_order FROM nenpyo WHERE user_id = ? ORDER BY sort_order, id',
-            { Slice => {} }, $u->{id}
-        );
-        respond([ map { tag_json($_) } @$rows ]);
+        respond(list_tags_json($dbh, $u->{id}));
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
         # 他ユーザーの年表と、それに含まれるイベントを返す（全公開。自分の年表は除く）。
         my $u = require_user($dbh);
+        # フォロー済み = 自分の仮想年表が指すフォロー先 id の集合。
         my %followed = map { $_ => 1 }
-            @{ $dbh->selectcol_arrayref('SELECT nenpyo_id FROM follows WHERE follower_user_id=?', undef, $u->{id}) };
+            @{ $dbh->selectcol_arrayref('SELECT virtual_nenpyo_id FROM nenpyo WHERE user_id=? AND virtual_nenpyo_id IS NOT NULL', undef, $u->{id}) };
+        # 公開対象は「普通の年表」のみ（フォロー取込みの仮想年表は出さない）。
         my $rows = $dbh->selectall_arrayref(
             'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
                     e.id AS event_id, e.start_year, e.start_month, e.start_day,
@@ -467,7 +504,7 @@ eval {
                FROM nenpyo t
                JOIN users u ON u.id = t.user_id
                JOIN events e ON e.nenpyo_id = t.id
-              WHERE t.user_id <> ?
+              WHERE t.user_id <> ? AND t.virtual_nenpyo_id IS NULL
               ORDER BY u.username, t.sort_order, t.id,
                        e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
             { Slice => {} }, $u->{id}
@@ -504,11 +541,11 @@ eval {
         # 新規の年表。並び順は末尾（最大+1）。
         my ($name, $color) = clean_tag(read_body_json());
         fail('timeline_name_taken', '409 Conflict')
-            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=?', undef, $u->{id}, $name);
+            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=? AND virtual_nenpyo_id IS NULL', undef, $u->{id}, $name);
         my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM nenpyo WHERE user_id=?', undef, $u->{id});
         my $row = $dbh->selectrow_hashref(
             'INSERT INTO nenpyo (user_id, name, color, sort_order) VALUES (?,?,?,?)
-             RETURNING id, name, color, sort_order',
+             RETURNING id, name, color, sort_order, virtual_nenpyo_id',
             undef, $u->{id}, $name, $color, $next
         );
         respond(tag_json($row));
@@ -526,11 +563,7 @@ eval {
             $pos++;
             $sth->execute($pos, 0 + $tid, $u->{id});
         }
-        my $rows = $dbh->selectall_arrayref(
-            'SELECT id, name, color, sort_order FROM nenpyo WHERE user_id = ? ORDER BY sort_order, id',
-            { Slice => {} }, $u->{id}
-        );
-        respond([ map { tag_json($_) } @$rows ]);
+        respond(list_tags_json($dbh, $u->{id}));
     }
     elsif ($action eq 'tag' && $method eq 'PUT') {
         my $u  = require_user($dbh);
@@ -540,11 +573,20 @@ eval {
             unless $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         my $body = read_body_json();
         my ($name, $color) = clean_tag($body);
+        # 一意性は「自分の普通年表どうし」だけで判定（フォロー名は重複可）。
         fail('timeline_name_taken', '409 Conflict')
-            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=? AND id<>?', undef, $u->{id}, $name, $id);
+            if $dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND name=? AND id<>? AND virtual_nenpyo_id IS NULL', undef, $u->{id}, $name, $id);
         $dbh->do('UPDATE nenpyo SET name=?, color=? WHERE id=? AND user_id=?',
             undef, $name, $color, $id, $u->{id});
-        my $cur = $dbh->selectrow_hashref('SELECT id, name, color, sort_order FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
+        my $cur = $dbh->selectrow_hashref(
+            'SELECT n.id, n.name, n.color, n.sort_order, n.virtual_nenpyo_id,
+                    (n.virtual_nenpyo_id IS NOT NULL AND t.id IS NULL) AS virtual_dead,
+                    ou.username AS owner
+               FROM nenpyo n
+               LEFT JOIN nenpyo t ON t.id = n.virtual_nenpyo_id
+               LEFT JOIN users  ou ON ou.id = t.user_id
+              WHERE n.id=? AND n.user_id=?',
+            undef, $id, $u->{id});
         respond(tag_json($cur));
     }
     elsif ($action eq 'tag' && $method eq 'DELETE') {
@@ -554,67 +596,30 @@ eval {
         $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }
-    elsif ($action eq 'followed' && $method eq 'GET') {
-        # フォロー中の年表と、それに属するイベント（本画面に読み取り専用で混ぜる用）
-        my $u = require_user($dbh);
-        my $tls = $dbh->selectall_arrayref(
-            'SELECT n.id AS nenpyo_id, n.name, n.color, ou.username AS owner
-               FROM follows f
-               JOIN nenpyo n ON n.id = f.nenpyo_id
-               JOIN users ou ON ou.id = n.user_id
-              WHERE f.follower_user_id = ?
-              ORDER BY ou.username, n.sort_order, n.id',
-            { Slice => {} }, $u->{id}
-        );
-        my $evs = $dbh->selectall_arrayref(
-            "SELECT $EVENT_COLS FROM events
-              WHERE nenpyo_id IN (SELECT nenpyo_id FROM follows WHERE follower_user_id = ?)
-              ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id",
-            { Slice => {} }, $u->{id}
-        );
-        respond({
-            timelines => [ map { {
-                nenpyo_id => 0 + $_->{nenpyo_id}, name => $_->{name},
-                color => $_->{color}, owner => $_->{owner},
-            } } @$tls ],
-            events => [ map { event_json($_) } @$evs ],
-        });
-    }
-    elsif ($action eq 'follows' && $method eq 'GET') {
-        # 自分がフォローしている年表（所有者名・色つき）
-        my $u = require_user($dbh);
-        my $rows = $dbh->selectall_arrayref(
-            'SELECT n.id AS nenpyo_id, n.name, n.color, ou.username AS owner
-               FROM follows f
-               JOIN nenpyo n ON n.id = f.nenpyo_id
-               JOIN users ou ON ou.id = n.user_id
-              WHERE f.follower_user_id = ?
-              ORDER BY ou.username, n.sort_order, n.id',
-            { Slice => {} }, $u->{id}
-        );
-        respond([ map { {
-            nenpyo_id => 0 + $_->{nenpyo_id}, name => $_->{name},
-            color => $_->{color}, owner => $_->{owner},
-        } } @$rows ]);
-    }
     elsif ($action eq 'follow' && $method eq 'POST') {
-        # 年表をフォローする。自分の年表はフォロー不可。
+        # 年表をフォローする = フォロー先の name/color をコピーした仮想年表行を自分に作る。
+        # 自分の年表・仮想年表はフォロー不可。二重フォローは無視（冪等）。
         my $u   = require_user($dbh);
         my $nid = read_body_json()->{nenpyo_id};
         fail('invalid_nenpyo_id') unless defined $nid && "$nid" =~ /^\d+$/;
         $nid = 0 + $nid;
-        my $owner = $dbh->selectrow_array('SELECT user_id FROM nenpyo WHERE id=?', undef, $nid);
-        fail('not_found', '404 Not Found') unless defined $owner;
-        fail('cannot_follow_own') if $owner == $u->{id};
-        $dbh->do('INSERT INTO follows (follower_user_id, nenpyo_id) VALUES (?,?) ON CONFLICT DO NOTHING',
-            undef, $u->{id}, $nid);
+        my $tgt = $dbh->selectrow_hashref('SELECT user_id, name, color, virtual_nenpyo_id FROM nenpyo WHERE id=?', undef, $nid);
+        fail('not_found', '404 Not Found') unless $tgt;
+        fail('cannot_follow_own') if $tgt->{user_id} == $u->{id};
+        fail('cannot_follow_virtual') if defined $tgt->{virtual_nenpyo_id}; # 取込みの取込みは不可
+        unless ($dbh->selectrow_array('SELECT 1 FROM nenpyo WHERE user_id=? AND virtual_nenpyo_id=?', undef, $u->{id}, $nid)) {
+            my $next = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order),0)+1 FROM nenpyo WHERE user_id=?', undef, $u->{id});
+            $dbh->do('INSERT INTO nenpyo (user_id, name, color, sort_order, virtual_nenpyo_id) VALUES (?,?,?,?,?)',
+                undef, $u->{id}, $tgt->{name}, $tgt->{color}, $next, $nid);
+        }
         respond({ ok => JSON::PP::true });
     }
     elsif ($action eq 'follow' && $method eq 'DELETE') {
+        # フォロー解除 = フォロー先 id を指す自分の仮想年表行を削除。
         my $u   = require_user($dbh);
         my $nid = query_param('nenpyo_id');
         fail('invalid_nenpyo_id') unless defined $nid && $nid =~ /^\d+$/;
-        $dbh->do('DELETE FROM follows WHERE follower_user_id=? AND nenpyo_id=?', undef, $u->{id}, 0 + $nid);
+        $dbh->do('DELETE FROM nenpyo WHERE user_id=? AND virtual_nenpyo_id=?', undef, $u->{id}, 0 + $nid);
         respond({ ok => JSON::PP::true });
     }
     else {

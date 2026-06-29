@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User, Download } from 'lucide-react'
-import { api, formatRangeAD, monthLabel, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent, type FollowedTimeline } from './api'
+import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
+import { api, formatRangeAD, monthLabel, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ExploreTag, type ExploreEvent } from './api'
 import { useTranslation } from 'react-i18next'
 import i18n, { detectLang, type Lang } from './i18n'
 import './App.css'
@@ -1106,10 +1106,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmDeleteTagId, setConfirmDeleteTagId] = useState<number | null>(null)
   // タグ一覧と、編集中イベントに付けるタグID
+  // 年表（自分の年表＋フォロー取込みの仮想年表）。仮想年表は virtual_nenpyo_id を持つ。
   const [tags, setTags] = useState<Tag[]>([])
-  // フォロー中の年表（他ユーザー・読み取り専用）とそのイベント
-  const [followedTimelines, setFollowedTimelines] = useState<FollowedTimeline[]>([])
-  const [followedEvents, setFollowedEvents] = useState<EventItem[]>([])
   const [formNenpyoId, setFormNenpyoId] = useState<number | null>(null)
   const [addingTag, setAddingTag] = useState(false) // 「タグの追加」モーダルを開いているか
   const [newTagName, setNewTagName] = useState('')
@@ -1191,40 +1189,25 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     window.addEventListener('mouseup', onUp)
   }
 
-  // nenpyo_id -> 色 の対応（期間バー・ドットの着色）。自分＋フォロー中の年表すべて。
+  // nenpyo_id -> 色 の対応（期間バー・ドットの着色）。仮想年表も自分の行なので色を持つ。
   const tagColors = new Map<number, string>()
   for (const t of tags) tagColors.set(t.id, t.color)
-  for (const ft of followedTimelines) tagColors.set(ft.nenpyo_id, ft.color)
-  // 自分の年表一覧（ユーザーが決めた並び順 sort_order）。
+  // 年表一覧（ユーザーが決めた並び順 sort_order。自分の年表とフォロー取込みが混在）。
   const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
 
-  // イベントが属する年表の id（最大1つ）。無ければ null。
-  const timelineIdOf = (e: EventItem) => e.nenpyo_id
-
-  // 年表ごとの所属イベント（自分のイベント。開始順）。
+  // 年表ごとの所属イベント（自分＋フォロー取込み。フォロー分は nenpyo_id が仮想年表 id に
+  // 付け替え済みなので、同じ仕組みでまとまる）。
   const eventsByTimeline = new Map<number, EventItem[]>()
   for (const e of events) {
-    const id = timelineIdOf(e)
-    if (id != null) {
-      const arr = eventsByTimeline.get(id)
-      if (arr) arr.push(e); else eventsByTimeline.set(id, [e])
-    }
-  }
-  // フォロー中の年表ごとの所属イベント（読み取り専用）。
-  const followedEventsByTimeline = new Map<number, EventItem[]>()
-  for (const e of followedEvents) {
     if (e.nenpyo_id != null) {
-      const arr = followedEventsByTimeline.get(e.nenpyo_id)
-      if (arr) arr.push(e); else followedEventsByTimeline.set(e.nenpyo_id, [e])
+      const arr = eventsByTimeline.get(e.nenpyo_id)
+      if (arr) arr.push(e); else eventsByTimeline.set(e.nenpyo_id, [e])
     }
   }
-  // 自分のイベントが「自分のものか」の判定用（フォロー分は編集不可）。
-  const myEventIds = new Set(events.map((e) => e.id))
-  // メイン領域の行順: 自分の年表ごと → 未所属 → フォロー中の年表ごと。
+  // メイン領域の行順: 年表ごと（sort_order 順。フォロー取込みも混在）→ 未所属。
   const orderedEvents = [
-    ...timelines.flatMap((t) => events.filter((e) => e.nenpyo_id === t.id)),
+    ...timelines.flatMap((t) => eventsByTimeline.get(t.id) ?? []),
     ...events.filter((e) => e.nenpyo_id == null),
-    ...followedTimelines.flatMap((ft) => followedEventsByTimeline.get(ft.nenpyo_id) ?? []),
   ]
   // 非表示（チェックを外した）年表のイベントを除く（未所属は常に表示）。
   const chartEvents = orderedEvents.filter((e) => e.nenpyo_id == null || !hiddenTimelines.has(e.nenpyo_id))
@@ -1257,17 +1240,12 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
     }
   }, [])
 
+  // フォロー/解除のあとは、年表一覧とイベント（仮想年表ぶんを含む）を取り直す。
   const reloadFollows = useCallback(async () => {
-    try {
-      const d = await api.getFollowed()
-      setFollowedTimelines(d.timelines)
-      setFollowedEvents(d.events)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [])
+    await Promise.all([reloadTags(), reload()])
+  }, [reloadTags, reload])
 
-  useEffect(() => { reload(); reloadTags(); reloadFollows() }, [reload, reloadTags, reloadFollows])
+  useEffect(() => { reload(); reloadTags() }, [reload, reloadTags])
 
   // ---- 自動保存 ------------------------------------------------------------
   // テキスト欄はフォーカスが外れたとき、タグはクリックされたときに 0.5 秒後を予約し、
@@ -1341,8 +1319,8 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
   }
 
   const selectEvent = (e: EventItem) => {
-    // フォロー中（他ユーザー）のイベントは読み取り専用。選択だけして編集画面は開かない。
-    if (!myEventIds.has(e.id)) { setChartSelectedId(e.id); return }
+    // フォロー取込み（他ユーザー）のイベントは読み取り専用。選択だけして編集画面は開かない。
+    if (e.readonly) { setChartSelectedId(e.id); return }
     // 年表の追加/編集フォームが開いている間は、イベント編集を開かない。
     if (addingTag || editingTagId != null) return
     flushSave()
@@ -1629,6 +1607,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
               {timelines.map((tl) => {
                 const tEvents = eventsByTimeline.get(tl.id) ?? []
                 const open = expandedTimelines.has(tl.id)
+                const isVirtual = tl.virtual_nenpyo_id != null // フォロー取込み（読み取り専用イベント）
                 return (
                   <li key={tl.id} className="timeline-group">
                     <div className="tag-item">
@@ -1643,9 +1622,16 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                         title={t('sidebar.showInMain')}
                       />
                       <span className="tag-name" style={{ background: tl.color, color: textColorFor(tl.color) }}>{tl.name}</span>
+                      {isVirtual && (
+                        tl.virtual_dead
+                          ? <span className="tag-owner tag-dead" title={t('sidebar.followDeleted')}>{t('sidebar.deleted')}</span>
+                          : <span className="tag-owner" title={t('sidebar.followedFrom', { owner: tl.owner ?? '?' })}><LinkIcon size={11} />@{tl.owner}</span>
+                      )}
                       <span className="tag-count">{t('common.itemCount', { n: tEvents.length })}</span>
                       <button className="tag-icon-btn" title={t('sidebar.editTimeline')} onClick={() => startEditTag(tl)}><Pencil size={15} /></button>
-                      <button className="tag-icon-btn" title={t('sidebar.addEventHere')} onClick={() => { setExpandedTimelines((p) => new Set(p).add(tl.id)); startNew(tl.id) }}><Plus size={15} /></button>
+                      {!isVirtual && (
+                        <button className="tag-icon-btn" title={t('sidebar.addEventHere')} onClick={() => { setExpandedTimelines((p) => new Set(p).add(tl.id)); startNew(tl.id) }}><Plus size={15} /></button>
+                      )}
                     </div>
                     {open && tEvents.length > 0 && (
                       <ul className="timeline-events">
@@ -1663,52 +1649,9 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                               <span className="tl-sub-date">{formatRangeAD(e)}</span>
                               <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
                             </div>
-                            <button className="tag-icon-btn" title={t('common.edit')} onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                )
-              })}
-
-              {/* フォロー中の年表（他ユーザー・読み取り専用） */}
-              {followedTimelines.length > 0 && <li className="tl-section-label">{t('sidebar.following')}</li>}
-              {followedTimelines.map((ft) => {
-                const fEvents = followedEventsByTimeline.get(ft.nenpyo_id) ?? []
-                const open = expandedTimelines.has(ft.nenpyo_id)
-                return (
-                  <li key={ft.nenpyo_id} className="timeline-group">
-                    <div className="tag-item">
-                      <button className="tl-toggle" title={open ? t('common.collapse') : t('common.expand')} onClick={() => toggleTimelineOpen(ft.nenpyo_id)}>
-                        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      </button>
-                      <input
-                        type="checkbox"
-                        className="tl-visible"
-                        checked={!hiddenTimelines.has(ft.nenpyo_id)}
-                        onChange={() => toggleTimelineVisible(ft.nenpyo_id)}
-                        title={t('sidebar.showInMain')}
-                      />
-                      <span className="tag-name" style={{ background: ft.color, color: textColorFor(ft.color) }}>{ft.name}</span>
-                      <span className="tag-owner">@{ft.owner}</span>
-                      <span className="tag-count">{t('common.itemCount', { n: fEvents.length })}</span>
-                    </div>
-                    {open && fEvents.length > 0 && (
-                      <ul className="timeline-events">
-                        {fEvents.map((e) => (
-                          <li
-                            key={e.id}
-                            className={'tl-sub' + (e.id === chartSelectedId ? ' selected' : '')}
-                            onClick={() => {
-                              setChartSelectedId(e.id)
-                              if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
-                            }}
-                          >
-                            <div className="tl-sub-content">
-                              <span className="tl-sub-date">{formatRangeAD(e)}</span>
-                              <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
-                            </div>
+                            {!e.readonly && (
+                              <button className="tag-icon-btn" title={t('common.edit')} onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -1736,7 +1679,7 @@ function Timeline({ username, onLogout }: { username: string; onLogout: () => vo
                 invertZoom={settings.invertZoom}
                 packLanes={packLanes}
               />
-            ) : (events.length > 0 || followedEvents.length > 0) ? (
+            ) : events.length > 0 ? (
               <TimelineChart
                 events={chartEvents}
                 selectedId={chartSelectedId}

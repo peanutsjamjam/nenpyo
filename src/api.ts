@@ -14,6 +14,7 @@ export type EventItem = {
   detail: string
   nenpyo_id: number | null   // 属する年表（最大1つ）。未所属は null
   ongoing: boolean           // 開始〜本日まで継続中（このとき end_* は無し）
+  readonly: boolean          // フォロー取込み（他人の年表）のイベント＝編集不可
   created: number
   updated: number
 }
@@ -37,6 +38,9 @@ export type Tag = {
   name: string
   color: string
   sort_order: number
+  virtual_nenpyo_id: number | null // フォロー取込みなら先 nenpyo.id、自分の年表は null
+  virtual_dead: boolean            // フォロー先が削除済み（名前だけ残りイベントは無い）
+  owner: string | null             // フォロー先の所有者名（自分の年表・削除済みは null）
 }
 
 export type TagInput = {
@@ -66,20 +70,6 @@ export type ExploreTag = {
   username: string
   followed: boolean   // 自分がフォロー済みか
   events: ExploreEvent[]
-}
-
-// フォロー中の年表（所有者名つき）
-export type FollowedTimeline = {
-  nenpyo_id: number
-  name: string
-  color: string
-  owner: string
-}
-
-// フォロー中の年表＋イベント（本画面に読み取り専用で混ぜる）
-export type FollowedData = {
-  timelines: FollowedTimeline[]
-  events: EventItem[]
 }
 
 const API = `${import.meta.env.BASE_URL}api.cgi`
@@ -130,9 +120,7 @@ export const api = {
   reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
   // 全ユーザーの年表（と各年表のイベント）を取得（エクスプローラー用）
   explore: () => call<ExploreTag[]>('GET', 'explore'),
-  // フォロー
-  listFollows: () => call<FollowedTimeline[]>('GET', 'follows'),
-  getFollowed: () => call<FollowedData>('GET', 'followed'),
+  // フォロー（取込み年表は tags/events に仮想年表として混ざって返る）
   follow: (nenpyoId: number) => call<{ ok: true }>('POST', 'follow', { body: { nenpyo_id: nenpyoId } }),
   unfollow: (nenpyoId: number) => call<{ ok: true }>('DELETE', `follow&nenpyo_id=${nenpyoId}`),
 }
