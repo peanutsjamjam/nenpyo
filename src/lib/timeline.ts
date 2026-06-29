@@ -88,27 +88,34 @@ export function eventSpan(e: EventDates): { s: number; end: number } {
   return { s, end }
 }
 
-export type GridLine = { left: number; major: boolean; topLabel: string; bottomLabel: string }
-// 世紀マーク（最上段）。世紀バンドの開始位置に置く。
-export type CenturyMark = { left: number; label: string }
+export type GridLine = { left: number; major: boolean; bottomLabel: string }
+// 上バーの「バンドラベル」（最上段の世紀、2段目の年/月）。バンドの開始位置に置き、
+// 開始が画面左に消えていても、その先頭は左端に貼り付けて「今どのバンドか」を示す。
+export type AxisMark = { left: number; label: string }
+// 後方互換のための別名（旧称）。
+export type CenturyMark = AxisMark
 // 表示範囲に入る世紀バンド（pos=100×k 区切り）の開始位置とラベルを返す。
 // k>=0 は AD 世紀(k+1)、k<0 は BC 世紀(-k)。先頭バンドは左端に貼り付ける。
 // 世紀が多すぎる（ズームアウト時）は出さない。
-export function buildCenturyMarks(rangeStart: number, rangeEnd: number, yearsVisible: number): CenturyMark[] {
+export function buildCenturyMarks(rangeStart: number, rangeEnd: number, yearsVisible: number): AxisMark[] {
   const kFirst = Math.floor(rangeStart / 100)
   const kLast = Math.floor(rangeEnd / 100)
   if (kLast - kFirst > 40) return []
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
-  const marks: CenturyMark[] = []
+  const marks: AxisMark[] = []
   for (let k = kFirst; k <= kLast; k++) {
     const label = k >= 0 ? i18n.t('axis.century', { n: k + 1 }) : i18n.t('axis.centuryBC', { n: -k })
     marks.push({ left: Math.max(0, pct(100 * k)), label }) // 開始が左端より手前なら 0% に貼り付け
   }
   return marks
 }
-// 上バー（グリッド線）の本数・ラベルを、表示範囲から計算する。
-// 線が maxGridLines 以内に収まる最も細かい刻みを選び、年/月/日のラベルを付ける。
-export function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: number, maxGridLines: number): GridLine[] {
+// 上バー（グリッド線・刻みラベル）と、2段目のバンドラベルを表示範囲から計算する。
+// 線が maxGridLines 以内に収まる最も細かい刻み（年/月/日）を選ぶ。
+//   下段（bottomLabel）= 刻みそのもの（年 / 月名 / n日）を各縦線に付ける。
+//   2段目（bandMarks）= そのひとつ上の単位（月グリッド→年、日グリッド→「年 月」）。
+//     世紀行と同様にバンド開始へ置き、左に消えた先頭バンドは左端へ貼り付ける。
+//     年グリッドのときは下段が年なので 2段目は無し。
+export function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisible: number, maxGridLines: number): { gridLines: GridLine[]; bandMarks: AxisMark[] } {
   const lineCap = maxGridLines + 8 // 安全用の打ち切り
   const pct = (y: number) => ((y - rangeStart) / yearsVisible) * 100
   let gridStep = GRID_STEPS[GRID_STEPS.length - 1]
@@ -116,8 +123,9 @@ export function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisibl
     if (yearsVisible / iv <= maxGridLines - 1) { gridStep = iv; break }
   }
   const gridLines: GridLine[] = []
+  const bandMarks: AxisMark[] = []
   if (gridStep >= 1) {
-    // 年グリッド: 「丸い年（刻みの倍数）」＋ AD1 に線を引く（西暦0年は無い）。
+    // 年グリッド: 「丸い年（刻みの倍数）」＋ AD1 に線を引く（西暦0年は無い）。2段目は無し。
     const step = gridStep
     const yStart = posToYM(rangeStart).year
     const yEnd = posToYM(rangeEnd).year
@@ -129,40 +137,51 @@ export function buildGridLines(rangeStart: number, rangeEnd: number, yearsVisibl
     for (const y of Array.from(years).sort((a, b) => a - b)) {
       const p = y >= 1 ? y - 1 : y // その年の頭の座標（AD は -1 補正）
       if (p < rangeStart || p > rangeEnd || gridLines.length >= lineCap) continue
-      gridLines.push({ left: pct(p), major: y === 1, topLabel: '', bottomLabel: gridYearLabel(y) })
+      gridLines.push({ left: pct(p), major: y === 1, bottomLabel: gridYearLabel(y) })
     }
   } else if (gridStep >= MONTH) {
-    // 月グリッド: 実際の各月1日に線を引く（月幅は実際の長さに比例）。1月の上に年。
+    // 月グリッド: 実際の各月1日に線を引く（月幅は実際の長さに比例）。下段=月名。
     const start = posToYMD(rangeStart)
     let y = start.year, m = start.month
     while (gridLines.length < lineCap) {
       const p = fracYear(y, m, 1)
       if (p > rangeEnd) break
       if (p >= rangeStart) {
-        gridLines.push({
-          left: pct(p), major: y === 1 && m === 1,
-          topLabel: m === 1 ? gridYearLabel(y) : '', bottomLabel: monthLabel(m),
-        })
+        gridLines.push({ left: pct(p), major: y === 1 && m === 1, bottomLabel: monthLabel(m) })
       }
       m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } // 西暦0年は飛ばす
     }
+    // 2段目: 年バンド（1月1日に開始）。先頭（左に消えている年）は左端へ貼り付け。
+    let by = start.year
+    while (bandMarks.length < lineCap) {
+      const p = fracYear(by, 1, 1)
+      if (p > rangeEnd) break
+      bandMarks.push({ left: Math.max(0, pct(p)), label: gridYearLabel(by) })
+      by++; if (by === 0) by = 1
+    }
   } else {
-    // 日グリッド: 実際の各日に線を引く（その月の実日数まで＝偽の29/30/31日は出ない）。
+    // 日グリッド: 実際の各日に線を引く（その月の実日数まで＝偽の29/30/31日は出ない）。下段=n日。
     const start = posToYMD(rangeStart)
     let y = start.year, m = start.month, d = start.day
     while (gridLines.length < lineCap) {
       const p = fracYear(y, m, d)
       if (p > rangeEnd) break
       if (p >= rangeStart) {
-        let topLabel = ''
-        if (d === 1) topLabel = `${gridYearLabel(y)} ${monthLabel(m)}` // 各月1日に「年 ○月」（毎月、年も付ける）
-        gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, topLabel, bottomLabel: i18n.t('axis.day', { d }) })
+        gridLines.push({ left: pct(p), major: y === 1 && m === 1 && d === 1, bottomLabel: i18n.t('axis.day', { d }) })
       }
       d++
       if (d > daysInMonth(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; if (y === 0) y = 1 } }
     }
+    // 2段目: 「年 月」バンド（各月1日に開始）。先頭（左に消えている月）は左端へ貼り付け。
+    let my = start.year, mm = start.month
+    while (bandMarks.length < lineCap) {
+      const p = fracYear(my, mm, 1)
+      if (p > rangeEnd) break
+      bandMarks.push({ left: Math.max(0, pct(p)), label: `${gridYearLabel(my)} ${monthLabel(mm)}` })
+      mm++; if (mm > 12) { mm = 1; my++; if (my === 0) my = 1 }
+    }
   }
-  return gridLines
+  return { gridLines, bandMarks }
 }
 
 // レーン詰め: イベントを「範囲が重ならないものは同じ行（レーン）にまとめる」ように配置する。

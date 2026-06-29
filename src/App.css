@@ -108,7 +108,12 @@
   display: flex; flex-direction: column; line-height: 1.25;
 }
 .axis-tick.major { color: var(--text); font-weight: 700; }
-.axis-year { color: var(--text); }
+/* 2段目（年 / 年・月）バンドラベル: バンド開始位置に置き、下段の刻みの1行ぶん上へ絶対配置する。
+   先頭バンドは buildGridLines 側で左端(0%)に貼り付けるので、開始が左に消えても表示される。 */
+.axis-band {
+  position: absolute; bottom: 16px; padding-left: 3px;
+  font-size: 13px; color: var(--text); white-space: nowrap;
+}
 /* 最上段の世紀ラベル: 世紀バンドの開始位置に、上端へ絶対配置する。 */
 .axis-century {
   position: absolute; top: 0; padding-left: 3px;

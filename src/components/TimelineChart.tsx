@@ -141,7 +141,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
 
   // 画面あたりの最大縦線数。メイン領域の横幅 1000px で 25 本、横幅に比例させる。
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (chartW || 1000) / 1000))
-  const gridLines = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
+  const { gridLines, bandMarks } = buildGridLines(rangeStart, rangeEnd, yearsVisible, maxGridLines)
   const centuryMarks = buildCenturyMarks(rangeStart, rangeEnd, yearsVisible)
 
   // 下部の水平スクロールバー: 全イベントの範囲内を左右にパンする。
@@ -206,13 +206,15 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
           {centuryMarks.map((c, i) => (
             <span key={'c' + i} className="axis-century" style={{ left: `${c.left}%` }}>{c.label}</span>
           ))}
+          {bandMarks.map((b, i) => (
+            <span key={'b' + i} className="axis-band" style={{ left: `${b.left}%` }}>{b.label}</span>
+          ))}
           {gridLines.map((g, i) => (
             <span
               key={i}
               className={g.major ? 'axis-tick major' : 'axis-tick'}
               style={{ left: `${g.left}%` }}
             >
-              {g.topLabel && <span className="axis-year">{g.topLabel}</span>}
               <span className="axis-unit">{g.bottomLabel}</span>
             </span>
           ))}
