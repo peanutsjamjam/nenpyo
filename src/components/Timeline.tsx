@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from '../api'
 import i18n from '../i18n'
 import { type AppSettings, loadSettings, SETTINGS_KEY } from '../lib/settings'
-import { fracYear } from '../lib/timeline'
+import { fracYear, type LaneMode } from '../lib/timeline'
 import { textColorFor } from '../lib/format'
 import { TimelineChart } from './TimelineChart'
 import { SettingsPanel } from './SettingsPanel'
@@ -69,7 +69,10 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
     return next
   })
   // 期間バーをレーン詰め表示にするか（packed/unpacked）。トップバーのセグメントトグルで切替。
-  const [packLanes, setPackLanes] = useState(false)
+  // 表示方法は3択: 'unpacked'(1行ずつ) / 'middle'(semi-packed) / 'packed'(全体を詰める)。
+  const [laneMode, setLaneMode] = useState<LaneMode>('unpacked')
+  // エクスプローラーの帯は単一年表なので semi-packed は packed と同じ。中間も詰めて表示する。
+  const stripPacked = laneMode !== 'unpacked'
   // 開発用フラスコボタン（実験用機能の割り当て先。今は未割り当て）。
   const devButtons = [
     { active: false, title: '開発用フラスコ1', onClick: () => { /* 未割り当て */ } },
@@ -475,21 +478,29 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
               <Compass size={18} />
             </button>
           </div>
-          {/* packed/unpacked のセグメント切替（2択モード）。左=1行ずつ / 右=詰める */}
+          {/* 表示方法のセグメント切替（3択）。左=1行ずつ / 中=中間 / 右=詰める */}
           <div className="seg-toggle" role="group">
             <button
-              className={'seg-btn' + (!packLanes ? ' active' : '')}
-              title={t('nav.unpacked')} aria-label={t('nav.unpacked')} aria-pressed={!packLanes}
+              className={'seg-btn' + (laneMode === 'unpacked' ? ' active' : '')}
+              title={t('nav.unpacked')} aria-label={t('nav.unpacked')} aria-pressed={laneMode === 'unpacked'}
               disabled={showSettings}
-              onClick={() => setPackLanes(false)}
+              onClick={() => setLaneMode('unpacked')}
             >
               <ChartBarBig size={18} />
             </button>
             <button
-              className={'seg-btn' + (packLanes ? ' active' : '')}
-              title={t('nav.packed')} aria-label={t('nav.packed')} aria-pressed={packLanes}
+              className={'seg-btn' + (laneMode === 'middle' ? ' active' : '')}
+              title={t('nav.middle')} aria-label={t('nav.middle')} aria-pressed={laneMode === 'middle'}
               disabled={showSettings}
-              onClick={() => setPackLanes(true)}
+              onClick={() => setLaneMode('middle')}
+            >
+              <ChartNoAxesGantt size={18} />
+            </button>
+            <button
+              className={'seg-btn' + (laneMode === 'packed' ? ' active' : '')}
+              title={t('nav.packed')} aria-label={t('nav.packed')} aria-pressed={laneMode === 'packed'}
+              disabled={showSettings}
+              onClick={() => setLaneMode('packed')}
             >
               <ChartBarStacked size={18} />
             </button>
@@ -605,7 +616,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
                 wheelCtrl={settings.wheelCtrl}
                 zoomFactor={settings.zoomFactor}
                 invertZoom={settings.invertZoom}
-                packLanes={packLanes}
+                packLanes={stripPacked}
               />
             ) : events.length > 0 ? (
               <TimelineChart
@@ -624,7 +635,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
                 zoomFactor={settings.zoomFactor}
                 centerRequest={centerReq}
                 tagColors={tagColors}
-                packLanes={packLanes}
+                laneMode={laneMode}
               />
             ) : (
               <div className="placeholder">

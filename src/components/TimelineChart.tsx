@@ -4,7 +4,7 @@ import { formatRangeAD, type EventItem } from '../api'
 import { type WheelAction } from '../lib/settings'
 import { oneLine } from '../lib/format'
 import {
-  fracYear, eventSpan, buildGridLines, buildCenturyMarks, packLanesOf,
+  fracYear, eventSpan, buildGridLines, buildCenturyMarks, packLanesOf, packLanesSemiOf, type LaneMode,
   DAY, MIN_YEARS, MAX_YEARS, LABEL_FONT_PX, ROW_PX, MAX_GRID_LINES_AT_1000PX, NOW_FADE_PX, BAR_CLAMP,
 } from '../lib/timeline'
 
@@ -13,7 +13,7 @@ import {
 // 単クリック: その行を選択（縁取り表示）するだけ。
 // タイトル文字をダブルクリック: その項目の編集画面へ遷移。
 // Shift+ホイール: 表示幅（スケール）を拡大・縮小。
-export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors, packLanes }: {
+export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear, setCenterYear, yearsVisible, setYearsVisible, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor, centerRequest, tagColors, laneMode }: {
   events: EventItem[]
   selectedId: number | null
   onSelect: (id: number | null) => void
@@ -29,7 +29,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
   zoomFactor: number
   centerRequest: { id: number; n: number } | null
   tagColors: Map<number, string>
-  packLanes: boolean
+  laneMode: LaneMode
 }) {
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -101,8 +101,13 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
     return () => el.removeEventListener('wheel', onWheel)
   }, [setYearsVisible, setCenterYear, invertZoom, wheelPlain, wheelShift, wheelCtrl, zoomFactor])
 
-  // レーン構成（行ごとのイベント配列）。packLanes off は 1イベント=1レーン。
-  const lanes = packLanes ? packLanesOf(events) : events.map((e) => [e])
+  // 行に複数イベントが載りうるモード（詰め／中間）。off-screen ラベルの省略表示に使う。
+  const packed = laneMode !== 'unpacked'
+  // レーン構成（行ごとのイベント配列）。
+  //   unpacked … 1イベント=1行 / middle … 年表ごとに詰めて縦積み / packed … 全体を詰める
+  const lanes = laneMode === 'packed' ? packLanesOf(events)
+    : laneMode === 'middle' ? packLanesSemiOf(events, (e) => e.nenpyo_id)
+    : events.map((e) => [e])
   // イベント id -> 行（レーン）番号。中央へ移動の縦スクロール計算に使う。
   const laneIndexRef = useRef<Map<number, number>>(new Map())
   const laneIndex = new Map<number, number>()
@@ -259,9 +264,9 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
                   const offLeft = end < rangeStart
                   const offRight = s > rangeEnd
                   const labelText = offLeft
-                    ? (packLanes ? '◀' : `◀ ${title}`)
+                    ? (packed ? '◀' : `◀ ${title}`)
                     : offRight
-                      ? (packLanes ? '▶' : `${title} ▶`)
+                      ? (packed ? '▶' : `${title} ▶`)
                       : title
                   // タイトルの中心位置: 基本はバー中央。ただしタイトル全体が画面内に収まるよう、
                   // また可能ならバーの範囲内に収まるよう左右に「貼り付く」（端で固定される）。

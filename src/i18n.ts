@@ -56,6 +56,7 @@ const resources = {
         settings: '設定',
         logout: 'ログアウト',
         unpacked: '1行ずつ表示',
+        middle: '中間表示',
         packed: '詰めて表示',
       },
       sidebar: {
@@ -211,6 +212,7 @@ const resources = {
         settings: 'Settings',
         logout: 'Log out',
         unpacked: 'One row per item',
+        middle: 'Middle (grouped)',
         packed: 'Pack into rows',
       },
       sidebar: {

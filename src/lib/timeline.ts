@@ -201,6 +201,29 @@ export function packLanesOf<T extends EventDates>(events: T[]): T[][] {
   return lanes.map((l) => l.items)
 }
 
+// 表示方法（行への並べ方）:
+//   unpacked … 1イベント=1行
+//   middle   … semi-packed。年表ごとに packed して、年表どうしは行を共有せず縦に積む
+//   packed   … 全イベントをまとめて詰める
+export type LaneMode = 'unpacked' | 'middle' | 'packed'
+
+// semi-packed: groupOf で同じグループ（年表）のイベントを packed し、
+// グループは出現順（=年表リスト順）に縦へ積む。グループ間で行は共有しない。
+// 入力 events は年表リスト順に並んでいる前提（グループは初出順で積む）。
+export function packLanesSemiOf<T extends EventDates>(events: T[], groupOf: (e: T) => number | null): T[][] {
+  const groups = new Map<number | null, T[]>()
+  for (const e of events) {
+    const g = groupOf(e)
+    const arr = groups.get(g)
+    if (arr) arr.push(e); else groups.set(g, [e])
+  }
+  const lanes: T[][] = []
+  for (const arr of groups.values()) {
+    for (const lane of packLanesOf(arr)) lanes.push(lane) // その年表で使った行の続き（=未使用の最上行）から次の年表へ
+  }
+  return lanes
+}
+
 // イベント群の占有範囲（座標）。空なら null。
 export function eventsExtent(events: EventDates[]): { min: number; max: number } | null {
   let min = Infinity, max = -Infinity
