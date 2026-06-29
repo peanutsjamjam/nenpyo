@@ -177,6 +177,14 @@ sub clear_session_cookie {
     add_header("Set-Cookie: $COOKIE_NAME=; Path=$COOKIE_PATH; Max-Age=0; HttpOnly; Secure; SameSite=Lax");
 }
 
+# 期限切れセッションを掃除する（ログイン/登録時の「ついで掃除」。テーブル肥大化を防ぐ）。
+# 失敗してもログイン処理自体は止めないよう、エラーは warn のみにする。
+sub purge_expired_sessions {
+    my ($dbh) = @_;
+    eval { $dbh->do('DELETE FROM sessions WHERE expires_at < now()'); 1 }
+        or warn "purge_expired_sessions failed: $@\n";
+}
+
 # 現在のログインユーザー {id, username} を返す。未ログインなら undef。
 sub current_user {
     my ($dbh) = @_;
@@ -380,6 +388,7 @@ eval {
              VALUES (?,?, now() + interval '$SESSION_DAYS days')",
             undef, $token, $uid
         );
+        purge_expired_sessions($dbh);   # ついで掃除（期限切れセッションを削除）
         set_session_cookie($token);
         respond({ username => $username });
     }
@@ -403,6 +412,7 @@ eval {
              VALUES (?,?, now() + interval '$SESSION_DAYS days')",
             undef, $token, $u->{id}
         );
+        purge_expired_sessions($dbh);   # ついで掃除（期限切れセッションを削除）
         set_session_cookie($token);
         respond({ username => $u->{username} });
     }
