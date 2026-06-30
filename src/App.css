@@ -188,6 +188,8 @@
   font-size: 14px; font-weight: 700; white-space: nowrap; color: var(--text);
   cursor: pointer; user-select: none;
   text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg);
+  /* 全バーより上に描く。短いバーのタイトルが隣のバーへはみ出しても隠れないように。 */
+  z-index: 1;
 }
 
 /* 編集フォームは年表の上に重ねるカード。パネル外は背後の年表が見える。 */
