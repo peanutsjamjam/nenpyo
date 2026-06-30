@@ -27,6 +27,8 @@ use File::Basename qw(dirname);
 #   POST   ?action=change_password {current_password,new_password} -> パスワード変更
 #   DELETE ?action=account                         -> アカウント削除（関連データを全消去）
 #   GET    ?action=env                             -> {env}（実行環境名。env.pl 由来）
+#   GET    ?action=dev_users                        -> 全ユーザー一覧（開発環境のみ。本番は404）
+#   GET    ?action=dev_user_timeline&id=<uid>       -> 指定ユーザーの年表+イベント（開発環境のみ）
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
@@ -590,6 +592,69 @@ eval {
         $dbh->do('DELETE FROM users WHERE id = ?', undef, $u->{id});
         clear_session_cookie();
         respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'dev_users' && $method eq 'GET') {
+        # 開発用: 全ユーザーの一覧。開発環境でのみ有効（本番では存在しない扱い）。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $rows = $dbh->selectall_arrayref(
+            'SELECT u.id, u.username, u.email, u.created_at,
+                    (SELECT count(*) FROM nenpyo n WHERE n.user_id = u.id AND n.virtual_nenpyo_id IS NULL) AS nenpyo_count,
+                    (SELECT count(*) FROM events e WHERE e.user_id = u.id) AS event_count
+               FROM users u ORDER BY u.id',
+            { Slice => {} }
+        );
+        my @out = map {
+            +{
+                id           => 0 + $_->{id},
+                username     => $_->{username},
+                email        => $_->{email},
+                created_at   => $_->{created_at},
+                nenpyo_count => 0 + $_->{nenpyo_count},
+                event_count  => 0 + $_->{event_count},
+            }
+        } @$rows;
+        respond(\@out);
+    }
+    elsif ($action eq 'dev_user_timeline' && $method eq 'GET') {
+        # 開発用: 指定ユーザーの年表（nenpyo）とイベント一覧。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $uid = query_param('id');
+        fail('invalid_id') unless defined $uid && $uid =~ /^\d+$/;
+        my $uname = $dbh->selectrow_array('SELECT username FROM users WHERE id = ?', undef, $uid);
+        fail('not_found', '404 Not Found') unless defined $uname;
+        # 自分の年表（フォロー取込みの仮想年表は除く）。
+        my $nen = $dbh->selectall_arrayref(
+            'SELECT id, name, color FROM nenpyo
+              WHERE user_id = ? AND virtual_nenpyo_id IS NULL
+              ORDER BY sort_order, id',
+            { Slice => {} }, $uid
+        );
+        my $evs = $dbh->selectall_arrayref(
+            'SELECT id, nenpyo_id, start_year, start_month, start_day,
+                    end_year, end_month, end_day, ongoing, title, detail
+               FROM events WHERE user_id = ?
+              ORDER BY start_year, start_month NULLS FIRST, start_day NULLS FIRST, id',
+            { Slice => {} }, $uid
+        );
+        my @nlist = map { +{ id => 0 + $_->{id}, name => $_->{name}, color => $_->{color} } } @$nen;
+        my @elist = map {
+            +{
+                id          => 0 + $_->{id},
+                nenpyo_id   => numornull($_->{nenpyo_id}),
+                start_year  => 0 + $_->{start_year},
+                start_month => numornull($_->{start_month}),
+                start_day   => numornull($_->{start_day}),
+                end_year    => numornull($_->{end_year}),
+                end_month   => numornull($_->{end_month}),
+                end_day     => numornull($_->{end_day}),
+                ongoing     => pgbool($_->{ongoing}),
+                title       => $_->{title},
+                detail      => $_->{detail},
+            }
+        } @$evs;
+        respond({ username => $uname, nenpyo => \@nlist, events => \@elist });
     }
     elsif ($action eq 'me' && $method eq 'GET') {
         my $u = current_user($dbh);

@@ -10,6 +10,7 @@ import { TimelineChart } from './TimelineChart'
 import { SettingsPanel, type SettingsTab } from './SettingsPanel'
 import { ChangePasswordView } from './ChangePasswordView'
 import { Explorer } from './Explorer'
+import { DevUsers } from './DevUsers'
 
 // ---- 年表本体 --------------------------------------------------------------
 export function Timeline({ username, email, onLogout }: { username: string; email: string | null; onLogout: () => void }) {
@@ -72,8 +73,10 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   // エクスプローラーの帯は単一年表なので semi-packed は packed と同じ。中間も詰めて表示する。
   const stripPacked = laneMode !== 'unpacked'
   // 開発用フラスコボタン（実験用機能の割り当て先。今は未割り当て）。
+  // 開発用フラスコ1: メイン領域に全ユーザー一覧（開発環境のみ）を出す。
+  const [showDevUsers, setShowDevUsers] = useState(false)
   const devButtons = [
-    { active: false, title: '開発用フラスコ1', onClick: () => { /* 未割り当て */ } },
+    { active: showDevUsers, title: '開発用フラスコ1: 全ユーザー一覧', onClick: () => { setShowSettings(false); setShowDevUsers((v) => !v) } },
     { active: false, title: '開発用フラスコ2', onClick: () => { /* 未割り当て */ } },
     { active: false, title: '開発用フラスコ3', onClick: () => { /* 未割り当て */ } },
   ]
@@ -650,7 +653,9 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
         <div className="splitter" onMouseDown={startResize} title={t('common.dragWidth')} />
 
         <main className="editor">
-          {showExplorer ? (
+          {showDevUsers ? (
+              <DevUsers onClose={() => setShowDevUsers(false)} />
+            ) : showExplorer ? (
               <Explorer
                 onClose={() => setShowExplorer(false)}
                 username={username}

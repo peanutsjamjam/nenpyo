@@ -51,6 +51,35 @@
 /* ---- エディタ ---- */
 .editor { flex: 1; min-width: 0; display: flex; padding: 14px 10px; overflow-y: auto; position: relative; }
 
+/* 開発用: 全ユーザー一覧（上）＋指定ユーザーの年表（下）。メイン領域全体・上下可変。 */
+.dev-users { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.dev-users-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+.dev-users-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
+.dev-users-top { flex: 0 0 auto; overflow: auto; }
+.dev-users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dev-users-table th, .dev-users-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.dev-users-table th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 700; }
+.dev-users-table td { color: var(--text); }
+.dev-users-table .num { text-align: right; }
+.dev-user-row { cursor: pointer; }
+.dev-users-table tbody tr:hover { background: var(--panel-2); }
+.dev-users-table tbody tr.selected { background: var(--accent-soft); }
+/* 上下スプリッタ */
+.dev-hsplitter { flex: 0 0 6px; cursor: row-resize; background: var(--border); border-radius: 3px; margin: 6px 0; }
+.dev-hsplitter:hover, .dev-hsplitter:active { background: var(--accent); }
+/* 下段: 指定ユーザーの年表 */
+.dev-users-bottom { flex: 1; min-height: 0; overflow: auto; }
+.dev-tl-hint { color: var(--muted); padding: 8px 2px; }
+.dev-tl-user { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--text); }
+.dev-tl-group { margin-bottom: 14px; }
+.dev-tl-group-head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); }
+.dev-tl-name { color: var(--text); }
+.dev-tl-count { color: var(--muted); font-size: 12px; }
+.dev-tl-events { list-style: none; margin: 4px 0 0; padding: 0 0 0 20px; }
+.dev-tl-events li { display: flex; gap: 10px; padding: 2px 0; font-size: 13px; }
+.dev-tl-date { flex: 0 0 auto; color: var(--accent); font-weight: 700; white-space: nowrap; }
+.dev-tl-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 
 /* 設定・編集パネルはメイン（年表）の上に重ねる。パネル外は透明で背後がそのまま見える。 */
 .panel-overlay {

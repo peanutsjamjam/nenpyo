@@ -9,6 +9,36 @@ export type Account = {
   email: string | null
 }
 
+// 開発用の全ユーザー一覧（dev_users が返す。開発環境のみ）。
+export type DevUser = {
+  id: number
+  username: string
+  email: string | null
+  created_at: string
+  nenpyo_count: number
+  event_count: number
+}
+
+// 開発用: 指定ユーザーの年表とイベント（dev_user_timeline が返す）。
+export type DevUserEvent = {
+  id: number
+  nenpyo_id: number | null
+  start_year: number
+  start_month: number | null
+  start_day: number | null
+  end_year: number | null
+  end_month: number | null
+  end_day: number | null
+  ongoing: boolean
+  title: string
+  detail: string
+}
+export type DevUserData = {
+  username: string
+  nenpyo: { id: number; name: string; color: string }[]
+  events: DevUserEvent[]
+}
+
 export type EventItem = {
   id: number
   start_year: number
@@ -127,6 +157,10 @@ async function call<T>(method: string, action: string, opts: { id?: number; body
 export const api = {
   // 実行環境名（'development' / 'production' / 'unknown'）。env.pl 由来。
   env: () => call<{ env: string }>('GET', 'env'),
+  // 開発用: 全ユーザー一覧（開発環境のみ）。
+  listUsers: () => call<DevUser[]>('GET', 'dev_users'),
+  // 開発用: 指定ユーザーの年表＋イベント（開発環境のみ）。
+  devUserTimeline: (id: number) => call<DevUserData>('GET', 'dev_user_timeline', { id }),
   me: () => call<Account>('GET', 'me'),
   // メール確認つきサインアップ（申請→リンク→確定の3段階）。
   signupRequest: (email: string) =>
