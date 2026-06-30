@@ -223,8 +223,15 @@ sub mime_word {
 # 送信失敗時は 0 を返す（呼び出し側で扱う）。
 sub send_signup_email {
     my ($to, $url) = @_;
-    my $subject = mime_word('【nenpyo】登録用リンクのお知らせ');
-    my $body = "nenpyo への登録ありがとうございます。\n\n"
+    # 件名・本文とも、同じ内容を英語→日本語の順で併記する。
+    my $subject = mime_word('Your nenpyo sign-up link / 【nenpyo】登録用リンクのお知らせ');
+    my $body = "Thank you for signing up for nenpyo.\n"
+             . "Open the link below and set your username and password to complete your registration.\n"
+             . "(This link is valid for ${SIGNUP_TOKEN_HOURS} hour(s) only.)\n\n"
+             . "$url\n\n"
+             . "If you did not request this email, please ignore it.\n"
+             . "\n----------------------------------------\n\n"
+             . "nenpyo への登録ありがとうございます。\n"
              . "下記のリンクを開き、ユーザー名とパスワードを設定すると登録が完了します。\n"
              . "（このリンクは ${SIGNUP_TOKEN_HOURS} 時間のみ有効です）\n\n"
              . "$url\n\n"
