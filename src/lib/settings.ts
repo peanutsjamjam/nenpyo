@@ -20,6 +20,12 @@ export function clampBarHeight(h: number): number {
   if (!Number.isFinite(h)) return BAR_HEIGHT.def
   return Math.min(BAR_HEIGHT.max, Math.max(BAR_HEIGHT.min, Math.round(h)))
 }
+// 期間バー内に表示するタイトルの文字サイズ（px）。
+export const LABEL_FONT = { min: 8, max: 28, def: 14, step: 1 }
+export function clampLabelFont(s: number): number {
+  if (!Number.isFinite(s)) return LABEL_FONT.def
+  return Math.min(LABEL_FONT.max, Math.max(LABEL_FONT.min, Math.round(s)))
+}
 
 export type AppSettings = {
   theme: Theme
@@ -32,6 +38,7 @@ export type AppSettings = {
   moveClickedIntoView: boolean
   barHeight: number
   rowHeight: number
+  labelFont: number
 }
 
 export const SETTINGS_KEY = 'nenpyo-settings'
@@ -48,6 +55,7 @@ export function loadSettings(): AppSettings {
     moveClickedIntoView: false,
     barHeight: BAR_HEIGHT.def,
     rowHeight: ROW_HEIGHT.def,
+    labelFont: LABEL_FONT.def,
   }
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)

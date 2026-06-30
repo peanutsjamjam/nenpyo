@@ -3,7 +3,7 @@ import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp,
 import { useTranslation } from 'react-i18next'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from '../api'
 import i18n from '../i18n'
-import { type AppSettings, loadSettings, SETTINGS_KEY, clampBarHeight, clampRowHeight } from '../lib/settings'
+import { type AppSettings, loadSettings, SETTINGS_KEY, clampBarHeight, clampRowHeight, clampLabelFont } from '../lib/settings'
 import { fracYear, type LaneMode } from '../lib/timeline'
 import { textColorFor } from '../lib/format'
 import { TimelineChart } from './TimelineChart'
@@ -163,6 +163,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
     const rh = clampRowHeight(settings.rowHeight)
     document.documentElement.style.setProperty('--row-h', `${rh}px`)
     document.documentElement.style.setProperty('--bar-h', `${Math.min(clampBarHeight(settings.barHeight), rh)}px`)
+    document.documentElement.style.setProperty('--label-font', `${clampLabelFont(settings.labelFont)}px`)
     if (i18n.language !== settings.lang) i18n.changeLanguage(settings.lang)
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* 無視 */ }
   }, [settings])

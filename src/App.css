@@ -185,7 +185,7 @@
 /* 期間バーに被せて中央に表示するタイトル。バー上でも背景上でも読めるよう縁取り */
 .chart-bar-label {
   position: absolute; top: 50%; transform: translate(-50%, -50%);
-  font-size: 14px; font-weight: 700; white-space: nowrap; color: var(--text);
+  font-size: var(--label-font, 14px); font-weight: 700; white-space: nowrap; color: var(--text);
   cursor: pointer; user-select: none;
   text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg), 0 0 2px var(--bg);
   /* 全バーより上に描く。短いバーのタイトルが隣のバーへはみ出しても隠れないように。 */
@@ -301,9 +301,6 @@
 .bar-height-row { display: flex; align-items: center; gap: 12px; }
 .bar-height-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); cursor: pointer; }
 .bar-height-value { flex: 0 0 auto; width: 3.5em; text-align: right; font-size: 14px; color: var(--muted); }
-.bar-height-preview { flex: 0 0 auto; width: 80px; background: var(--accent); }
-/* 行の高さプレビューは塗りではなく枠で示す（バーの太さプレビューと区別） */
-.row-preview { background: transparent; border: 1px solid var(--border); border-radius: 4px; }
 /* アカウントタブの入力欄 */
 .account-input { width: 100%; }
 .account-input + .account-input { margin-top: 8px; }

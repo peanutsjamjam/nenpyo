@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { type Lang } from '../i18n'
-import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT } from '../lib/settings'
+import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT, LABEL_FONT } from '../lib/settings'
 
 export type SettingsTab = 'appearance' | 'account' | 'behavior'
 
@@ -91,7 +91,6 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
               onChange={(e) => { const rh = Number(e.target.value); setSettings((s) => ({ ...s, rowHeight: rh, barHeight: Math.min(s.barHeight, rh) })) }}
             />
             <span className="bar-height-value">{settings.rowHeight}px</span>
-            <span className="bar-height-preview row-preview" style={{ height: `${settings.rowHeight}px` }} />
           </div>
         </div>
       </section>
@@ -109,7 +108,23 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
               onChange={(e) => setSettings((s) => ({ ...s, barHeight: Number(e.target.value) }))}
             />
             <span className="bar-height-value">{Math.min(settings.barHeight, settings.rowHeight)}px</span>
-            <span className="bar-height-preview" style={{ height: `${Math.min(settings.barHeight, settings.rowHeight)}px`, borderRadius: `${Math.min(settings.barHeight, settings.rowHeight) / 2}px` }} />
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.labelFont')}</h3>
+        <div className="settings-section-body">
+          <div className="bar-height-row">
+            <input
+              type="range"
+              min={LABEL_FONT.min}
+              max={LABEL_FONT.max}
+              step={LABEL_FONT.step}
+              value={settings.labelFont}
+              onChange={(e) => setSettings((s) => ({ ...s, labelFont: Number(e.target.value) }))}
+            />
+            <span className="bar-height-value">{settings.labelFont}px</span>
           </div>
         </div>
       </section>
