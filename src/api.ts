@@ -110,6 +110,8 @@ export const api = {
   login: (username: string, password: string) =>
     call<{ username: string }>('POST', 'login', { body: { username, password } }),
   logout: () => call<{ ok: true }>('POST', 'logout'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    call<{ ok: true }>('POST', 'change_password', { body: { current_password: currentPassword, new_password: newPassword } }),
   listEvents: () => call<EventItem[]>('GET', 'events'),
   createEvent: (e: EventInput) => call<EventItem>('POST', 'event', { body: e }),
   updateEvent: (id: number, e: EventInput) => call<EventItem>('PUT', 'event', { id, body: e }),

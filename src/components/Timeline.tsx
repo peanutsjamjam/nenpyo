@@ -8,6 +8,7 @@ import { fracYear, type LaneMode } from '../lib/timeline'
 import { textColorFor } from '../lib/format'
 import { TimelineChart } from './TimelineChart'
 import { SettingsPanel, type SettingsTab } from './SettingsPanel'
+import { ChangePasswordView } from './ChangePasswordView'
 import { Explorer } from './Explorer'
 
 // 開発用ボタンの表示フラグ。本番ビルドでは自動的に消える（不要になったら削除）。
@@ -87,6 +88,8 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
   const [showSettings, setShowSettings] = useState(false)
   // 設定画面で最初に開くタブ（歯車→表示 / ユーザー名→アカウント）。
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance')
+  // パスワード変更画面（年表を一切出さない独立画面）の表示。
+  const [showChangePassword, setShowChangePassword] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
   // 歯車: 「表示」タブで設定を開く（開いていれば閉じる）。
   const openAppearance = () => { if (showSettings) setShowSettings(false); else { setSettingsTab('appearance'); setShowSettings(true) } }
@@ -467,6 +470,11 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
 
   const editing = isNew || selectedId != null
 
+  // パスワード変更中は、ログイン画面と同様に年表 UI を出さず専用画面だけを表示する。
+  if (showChangePassword) {
+    return <ChangePasswordView onDone={() => setShowChangePassword(false)} />
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -805,6 +813,7 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
               username={username}
               tab={settingsTab}
               onTabChange={setSettingsTab}
+              onChangePassword={() => setShowChangePassword(true)}
             />
           </div>
         )}

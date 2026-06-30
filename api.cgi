@@ -19,6 +19,7 @@ use MIME::Base64 ();
 #   POST   ?action=register  {username,password}  -> 登録してログイン状態に
 #   POST   ?action=login     {username,password}  -> ログイン
 #   POST   ?action=logout                          -> ログアウト
+#   POST   ?action=change_password {current_password,new_password} -> パスワード変更
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
@@ -421,6 +422,31 @@ eval {
         $dbh->do('DELETE FROM sessions WHERE token = ?', undef, $token)
             if defined $token && $token =~ /^[0-9a-f]+$/;
         clear_session_cookie();
+        respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'change_password' && $method eq 'POST') {
+        my $u = require_user($dbh);
+        my $body = read_body_json();
+        my $current = defined $body->{current_password} ? $body->{current_password} : '';
+        my $new     = defined $body->{new_password}     ? $body->{new_password}     : '';
+        # 現在のパスワードを確認（保存済みの salt/iterations で照合）。
+        my $row = $dbh->selectrow_hashref(
+            'SELECT password_hash, salt, iterations FROM users WHERE id = ?',
+            undef, $u->{id}
+        );
+        fail('not_found', '404 Not Found') unless $row;
+        my $cur_hash = pbkdf2($current, $row->{salt}, $row->{iterations});
+        fail('current_password_wrong', '403 Forbidden')
+            unless const_eq($cur_hash, $row->{password_hash});
+        # 新しいパスワードを検証して、新しい salt で作り直して保存する。
+        fail('password_too_short') if length($new) < 4;
+        fail('password_too_long')  if length($new) > 128;
+        my $salt = random_hex(16);
+        my $hash = pbkdf2($new, $salt, $PBKDF2_ITER);
+        $dbh->do(
+            'UPDATE users SET password_hash = ?, salt = ?, iterations = ? WHERE id = ?',
+            undef, $hash, $salt, $PBKDF2_ITER, $u->{id}
+        );
         respond({ ok => JSON::PP::true });
     }
     elsif ($action eq 'me' && $method eq 'GET') {

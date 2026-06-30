@@ -4,26 +4,25 @@ import { useTranslation } from 'react-i18next'
 import { type Lang } from '../i18n'
 import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT } from '../lib/settings'
 
-export type SettingsTab = 'appearance' | 'account'
+export type SettingsTab = 'appearance' | 'account' | 'behavior'
 
 // ---- 設定画面（メイン領域に表示） ------------------------------------------
-// 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」はブラウザ
-// (localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
+// 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」「動作(Behavior)」は
+// ブラウザ(localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
 // どのタブを開くかは呼び出し側が決める（歯車→表示 / ユーザー名→アカウント）。
-export function SettingsPanel({ settings, setSettings, onClose, username, tab, onTabChange }: {
+export function SettingsPanel({ settings, setSettings, onClose, username, tab, onTabChange, onChangePassword }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
   username: string
   tab: SettingsTab
   onTabChange: (t: SettingsTab) => void
+  onChangePassword: () => void
 }) {
   const { t } = useTranslation()
   // アカウント欄の入力（保存処理は今後実装。今は入力状態の保持のみ）。
   const [accEmail, setAccEmail] = useState('')
   const [accBio, setAccBio] = useState('')
-  const [accNewPw, setAccNewPw] = useState('')
-  const [accNewPw2, setAccNewPw2] = useState('')
   // どの修飾キーにも「拡大縮小」が割り当てられていなければ、倍率・反転は無効化
   const zoomUsed = settings.wheelPlain === 'zoom' || settings.wheelShift === 'zoom' || settings.wheelCtrl === 'zoom'
   return (
@@ -36,9 +35,10 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
       <div className="settings-tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'account'} className={tab === 'account' ? 'active' : ''} onClick={() => onTabChange('account')}>{t('settings.tabAccount')}</button>
         <button role="tab" aria-selected={tab === 'appearance'} className={tab === 'appearance' ? 'active' : ''} onClick={() => onTabChange('appearance')}>{t('settings.tabAppearance')}</button>
+        <button role="tab" aria-selected={tab === 'behavior'} className={tab === 'behavior' ? 'active' : ''} onClick={() => onTabChange('behavior')}>{t('settings.tabBehavior')}</button>
       </div>
 
-      {tab === 'appearance' ? (<>
+      {tab === 'appearance' && (<>
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.language')}</h3>
         <div className="settings-section-body">
@@ -114,6 +114,10 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
         </div>
       </section>
 
+      <p className="settings-note">{t('settings.savedNote')}</p>
+      </>)}
+
+      {tab === 'behavior' && (<>
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.wheel.section')}</h3>
         <div className="settings-section-body">
@@ -178,7 +182,9 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
       </section>
 
       <p className="settings-note">{t('settings.savedNote')}</p>
-      </>) : (<>
+      </>)}
+
+      {tab === 'account' && (<>
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.account.username')}</h3>
         <div className="settings-section-body">
@@ -196,8 +202,7 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.account.changePassword')}</h3>
         <div className="settings-section-body">
-          <input className="account-input" type="password" placeholder={t('settings.account.newPassword')} value={accNewPw} onChange={(e) => setAccNewPw(e.target.value)} autoComplete="new-password" />
-          <input className="account-input" type="password" placeholder={t('settings.account.confirmPassword')} value={accNewPw2} onChange={(e) => setAccNewPw2(e.target.value)} autoComplete="new-password" />
+          <button className="account-action-btn" onClick={onChangePassword}>{t('settings.account.changePasswordButton')}</button>
         </div>
       </section>
 
