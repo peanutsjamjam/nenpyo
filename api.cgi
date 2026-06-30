@@ -37,7 +37,7 @@ use File::Basename qw(dirname);
 #   GET    ?action=tags                            -> 自分の年表一覧（nenpyo）
 #   POST   ?action=tag       {name,color}          -> 年表作成
 #   PUT    ?action=tag&id=<id>    {name,color}     -> 年表更新
-#   DELETE ?action=tag&id=<id>                     -> 年表削除
+#   DELETE ?action=tag&id=<id>[&with_events=1]     -> 年表削除（with_events=1 で配下イベントも削除）
 #   POST   ?action=tags_reorder  {ids:[..]}        -> 年表の並び順を配列順に更新
 #   POST   ?action=follow    {nenpyo_id}           -> 年表をフォロー（name/color をコピーした仮想年表を作成）
 #   DELETE ?action=follow&nenpyo_id=<id>           -> フォロー解除（その仮想年表行を削除）
@@ -836,6 +836,12 @@ eval {
         my $u  = require_user($dbh);
         my $id = query_param('id');
         fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        # with_events=1 のときは、年表に属するイベントも一緒に削除する。
+        # （無指定なら従来どおり、イベントは ON DELETE SET NULL で未所属に残る）
+        my $with = query_param('with_events');
+        if (defined $with && $with eq '1') {
+            $dbh->do('DELETE FROM events WHERE user_id=? AND nenpyo_id=?', undef, $u->{id}, $id);
+        }
         $dbh->do('DELETE FROM nenpyo WHERE id=? AND user_id=?', undef, $id, $u->{id});
         respond({ ok => JSON::PP::true });
     }

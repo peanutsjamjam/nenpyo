@@ -12,6 +12,10 @@ import { ChangePasswordView } from './ChangePasswordView'
 import { Explorer } from './Explorer'
 import { DevUsers } from './DevUsers'
 
+// サイドバーの仮想「（年表に未所属）」グループ用の擬似 id（DB の nenpyo.id は正の値なので衝突しない）。
+// 展開状態(expandedTimelines)・表示/非表示(hiddenTimelines)の集合でこの id を使う。
+const UNASSIGNED_ID = -1
+
 // ---- 年表本体 --------------------------------------------------------------
 export function Timeline({ username, email, onLogout }: { username: string; email: string | null; onLogout: () => void }) {
   const { t } = useTranslation()
@@ -32,6 +36,8 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmDeleteTagId, setConfirmDeleteTagId] = useState<number | null>(null)
+  // 年表削除の確認で「含むイベントも削除する」にチェックが入っているか。
+  const [deleteTagWithEvents, setDeleteTagWithEvents] = useState(false)
   // タグ一覧と、編集中イベントに付けるタグID
   // 年表（自分の年表＋フォロー取込みの仮想年表）。仮想年表は virtual_nenpyo_id を持つ。
   const [tags, setTags] = useState<Tag[]>([])
@@ -140,6 +146,8 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   for (const t of tags) tagColors.set(t.id, t.color)
   // 年表一覧（ユーザーが決めた並び順 sort_order。自分の年表とフォロー取込みが混在）。
   const timelines = [...tags].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+  // イベントの所属先に選べる年表（自分の実年表のみ。フォロー取込みの仮想年表は除く）。
+  const assignableTimelines = timelines.filter((tl) => tl.virtual_nenpyo_id == null)
 
   // 年表ごとの所属イベント（自分＋フォロー取込み。フォロー分は nenpyo_id が仮想年表 id に
   // 付け替え済みなので、同じ仕組みでまとまる）。
@@ -150,13 +158,17 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
       if (arr) arr.push(e); else eventsByTimeline.set(e.nenpyo_id, [e])
     }
   }
+  // 年表に未所属（nenpyo_id が null）のイベント。サイドバーの仮想グループの子になる。
+  const unassignedEvents = events.filter((e) => e.nenpyo_id == null)
   // メイン領域の行順: 年表ごと（sort_order 順。フォロー取込みも混在）→ 未所属。
   const orderedEvents = [
     ...timelines.flatMap((t) => eventsByTimeline.get(t.id) ?? []),
-    ...events.filter((e) => e.nenpyo_id == null),
+    ...unassignedEvents,
   ]
-  // 非表示（チェックを外した）年表のイベントを除く（未所属は常に表示）。
-  const chartEvents = orderedEvents.filter((e) => e.nenpyo_id == null || !hiddenTimelines.has(e.nenpyo_id))
+  // 非表示（チェックを外した）年表/未所属グループのイベントを除く。
+  const chartEvents = orderedEvents.filter((e) =>
+    e.nenpyo_id == null ? !hiddenTimelines.has(UNASSIGNED_ID) : !hiddenTimelines.has(e.nenpyo_id)
+  )
 
   // 設定をドキュメントへ反映＆ localStorage に保存
   useEffect(() => {
@@ -360,14 +372,15 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
     }
   }
 
-  const deleteTag = async (id: number) => {
+  // withEvents=true なら配下イベントも一緒に削除。false なら従来どおりイベントは未所属に残る。
+  const deleteTag = async (id: number, withEvents: boolean) => {
     if (tagSaveTimer.current != null) { clearTimeout(tagSaveTimer.current); tagSaveTimer.current = null }
     try {
-      await api.deleteTag(id)
+      await api.deleteTag(id, withEvents)
       setFormNenpyoId((cur) => (cur === id ? null : cur))
       setEditingTagId(null)
       await reloadTags()
-      await reload() // 年表削除でイベントの nenpyo_id も SET NULL される
+      await reload() // 年表削除でイベントは削除（withEvents時）または nenpyo_id が SET NULL
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -490,6 +503,27 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   }
 
   const editing = isNew || selectedId != null
+
+  // サイドバーの年表（および未所属グループ）配下に出すイベント1件分。両方で使い回す。
+  const renderSubEvent = (e: EventItem) => (
+    <li
+      key={e.id}
+      className={'tl-sub' + (e.id === chartSelectedId ? ' selected' : '')}
+      onClick={() => {
+        setChartSelectedId(e.id)
+        if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
+      }}
+      onDoubleClick={() => selectEvent(e)}
+    >
+      <div className="tl-sub-content">
+        <span className="tl-sub-date">{formatRangeAD(e)}</span>
+        <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
+      </div>
+      {!e.readonly && (
+        <button className="tag-icon-btn" title={t('common.edit')} onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
+      )}
+    </li>
+  )
 
   // パスワード変更中は、ログイン画面と同様に年表 UI を出さず専用画面だけを表示する。
   if (showChangePassword) {
@@ -621,30 +655,45 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
                     </div>
                     {open && tEvents.length > 0 && (
                       <ul className="timeline-events">
-                        {tEvents.map((e) => (
-                          <li
-                            key={e.id}
-                            className={'tl-sub' + (e.id === chartSelectedId ? ' selected' : '')}
-                            onClick={() => {
-                              setChartSelectedId(e.id)
-                              if (settings.moveClickedIntoView) setCenterReq((p) => ({ id: e.id, n: (p?.n ?? 0) + 1 }))
-                            }}
-                            onDoubleClick={() => selectEvent(e)}
-                          >
-                            <div className="tl-sub-content">
-                              <span className="tl-sub-date">{formatRangeAD(e)}</span>
-                              <span className="tl-sub-title">{e.title || t('common.untitled')}</span>
-                            </div>
-                            {!e.readonly && (
-                              <button className="tag-icon-btn" title={t('common.edit')} onClick={(ev) => { ev.stopPropagation(); selectEvent(e) }}><Pencil size={14} /></button>
-                            )}
-                          </li>
-                        ))}
+                        {tEvents.map(renderSubEvent)}
                       </ul>
                     )}
                   </li>
                 )
               })}
+              {/* 仮想グループ「（年表に未所属）」。DBには存在しない。未所属イベントがあるときだけ、
+                  常に一覧の最下部に固定で表示する。名前・色は変更不可、並べ替え不可。 */}
+              {unassignedEvents.length > 0 && (() => {
+                const open = expandedTimelines.has(UNASSIGNED_ID)
+                return (
+                  <li key="unassigned" className="timeline-group">
+                    <div className="tag-item">
+                      <button className="tl-toggle" title={open ? t('common.collapse') : t('common.expand')} onClick={() => toggleTimelineOpen(UNASSIGNED_ID)}>
+                        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                      <input
+                        type="checkbox"
+                        className="tl-visible"
+                        checked={!hiddenTimelines.has(UNASSIGNED_ID)}
+                        onChange={() => toggleTimelineVisible(UNASSIGNED_ID)}
+                        title={t('sidebar.showInMain')}
+                      />
+                      <span className="tag-name tag-name-unassigned">
+                        <span className="tag-name-text">{t('event.noTimeline')}</span>
+                      </span>
+                      <span className="tag-count">{t('common.itemCount', { n: unassignedEvents.length })}</span>
+                      {/* 名前変更・追加ボタンは持たないので、他の年表と高さ・位置を揃える空要素 */}
+                      <span className="tag-icon-spacer" aria-hidden="true" />
+                      <span className="tag-icon-spacer" aria-hidden="true" />
+                    </div>
+                    {open && (
+                      <ul className="timeline-events">
+                        {unassignedEvents.map(renderSubEvent)}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })()}
             </ul>
             </>)}
           </div>
@@ -717,9 +766,22 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
                         {tl ? (<>
                           <span className="tag-swatch" style={{ background: tl.color }} />
                           <span className="event-timeline-name">{tl.name}</span>
-                        </>) : (
+                        </>) : (<>
                           <span className="hint">{t('event.noTimeline')}</span>
-                        )}
+                          {/* 未所属のときは、存在する年表があればドロップダウンで所属先を選べる。 */}
+                          {assignableTimelines.length > 0 && (
+                            <select
+                              className="event-timeline-select"
+                              value=""
+                              onChange={(ev) => { const id = Number(ev.target.value); if (id) { setFormNenpyoId(id); scheduleSave() } }}
+                            >
+                              <option value="">{t('event.assignToTimeline')}</option>
+                              {assignableTimelines.map((opt) => (
+                                <option key={opt.id} value={opt.id}>{opt.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </>)}
                       </div>
                     </div>
                   </div>
@@ -791,7 +853,7 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
                         <button className="settings-close" onClick={() => downloadTimeline(tl!)} title={t('timeline.download')} aria-label={t('timeline.download')}><Download size={18} /></button>
                       )}
                       {!isAdd && (
-                        <button className="settings-close" onClick={() => setConfirmDeleteTagId(tl!.id)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={18} /></button>
+                        <button className="settings-close" onClick={() => { setExpandedTimelines((p) => new Set(p).add(tl!.id)); setDeleteTagWithEvents(false); setConfirmDeleteTagId(tl!.id) }} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={18} /></button>
                       )}
                       <button className="settings-close" onClick={closeTagEditor} title={t('common.close')} aria-label={t('common.close')}><X size={18} /></button>
                     </div>
@@ -860,9 +922,13 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
         <div className="modal-overlay" onClick={() => setConfirmDeleteTagId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <p>{t('timeline.confirmDelete')}</p>
+            <label className="modal-check">
+              <input type="checkbox" checked={deleteTagWithEvents} onChange={(e) => setDeleteTagWithEvents(e.target.checked)} />
+              <span>{t('timeline.deleteWithEvents')}</span>
+            </label>
             <div className="modal-actions">
               <button onClick={() => setConfirmDeleteTagId(null)}>{t('common.cancel')}</button>
-              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>{t('common.deleteConfirm')}</button>
+              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id, deleteTagWithEvents) }}>{t('common.deleteConfirm')}</button>
             </div>
           </div>
         </div>

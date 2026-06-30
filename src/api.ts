@@ -182,7 +182,8 @@ export const api = {
   listTags: () => call<Tag[]>('GET', 'tags'),
   createTag: (t: TagInput) => call<Tag>('POST', 'tag', { body: t }),
   updateTag: (id: number, t: TagInput) => call<Tag>('PUT', 'tag', { id, body: t }),
-  deleteTag: (id: number) => call<{ ok: true }>('DELETE', 'tag', { id }),
+  deleteTag: (id: number, withEvents = false) =>
+    call<{ ok: true }>('DELETE', withEvents ? 'tag&with_events=1' : 'tag', { id }),
   reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
   // 全ユーザーの年表（と各年表のイベント）を取得（エクスプローラー用）
   explore: () => call<ExploreTag[]>('GET', 'explore'),

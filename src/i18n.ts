@@ -95,6 +95,7 @@ const resources = {
         editTitle: 'イベントの編集',
         timeline: '年表',
         noTimeline: '（年表に未所属）',
+        assignToTimeline: '年表に追加…',
         period: '期間',
         ongoing: '現在まで継続中',
         title: 'タイトル',
@@ -110,6 +111,7 @@ const resources = {
         pickColor: 'クリックで色を選ぶ',
         name: '年表名',
         confirmDelete: 'この年表を削除しますか？',
+        deleteWithEvents: 'この年表が含むイベントを削除する',
         download: 'テキストでダウンロード',
       },
       chart: {
@@ -297,6 +299,7 @@ const resources = {
         editTitle: 'Edit event',
         timeline: 'Timeline',
         noTimeline: '(no timeline)',
+        assignToTimeline: 'Add to a timeline…',
         period: 'Period',
         ongoing: 'Ongoing (to present)',
         title: 'Title',
@@ -312,6 +315,7 @@ const resources = {
         pickColor: 'Click to choose a color',
         name: 'Timeline name',
         confirmDelete: 'Delete this timeline?',
+        deleteWithEvents: 'Also delete the events in this timeline',
         download: 'Download as text',
       },
       chart: {

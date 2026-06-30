@@ -257,6 +257,7 @@
 .event-timeline { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 .event-timeline .tag-swatch { width: 16px; height: 16px; }
 .event-timeline-name { font-size: 16px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-timeline-select { margin-left: 4px; font-size: 14px; padding: 4px 8px; }
 .fld.grow { flex: 1; min-height: 0; }
 /* 見出し行：ラベル左・文字数カウンタ右 */
 .fld-head { display: flex; align-items: baseline; }
@@ -314,6 +315,8 @@
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: grid; place-items: center; z-index: 50; }
 .modal { background: var(--panel); border-radius: 12px; padding: 24px; max-width: 320px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
 .modal p { margin: 0 0 18px; }
+/* 確認モーダル内のチェックボックス（例: 年表削除時に配下イベントも消すか） */
+.modal-check { display: flex; align-items: center; gap: 8px; justify-content: center; margin: 0 0 18px; font-size: 14px; color: var(--text); cursor: pointer; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 .modal-actions button { border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
 .modal-actions button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
@@ -437,6 +440,8 @@
 /* 年表名: 背景をその年表の色にしたチップ（色は inline で指定）。
    内側に名前(左・省略あり)とフォロー所有者バッジ(右寄せ)を並べる。 */
 .tag-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 17px; padding: 3px 10px; border-radius: 6px; }
+/* 「（年表に未所属）」は実在の年表でないので、色を持たず破線枠の控えめな見た目にする。 */
+.tag-name-unassigned { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-style: italic; }
 .tag-name-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* メイン領域への表示チェックボックス */
 .tl-visible { flex: 0 0 auto; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
