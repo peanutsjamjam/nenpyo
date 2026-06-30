@@ -267,6 +267,14 @@
 .auth-back { display: flex; align-items: center; justify-content: center; gap: 6px; background: transparent; border: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px; }
 .auth-back:hover { color: var(--text); }
 .auth-success { text-align: center; color: var(--accent); font-size: 14px; font-weight: 600; }
+/* パスワード欄に重ねる「押している間だけ表示」する目アイコン */
+.pw-field { position: relative; display: flex; }
+.pw-field input { width: 100%; padding-right: 40px; }
+.pw-reveal { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 38px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 0; border-radius: 0 7px 7px 0; }
+.pw-reveal:hover { color: var(--text); }
+/* 新パスワードと確認の一致状態を枠色で示す（両欄に入力があるときだけ） */
+.pw-field.match input { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.pw-field.mismatch input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 
 /* ---- 削除確認モーダル ---- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: grid; place-items: center; z-index: 50; }

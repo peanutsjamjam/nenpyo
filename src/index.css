@@ -8,6 +8,7 @@
   --accent: #9a6b3f;
   --accent-soft: #f0e3d4;
   --danger: #c0473b;
+  --ok: #3a9d5d;
   --scrollbar-thumb: #c1c1c1;   /* ネイティブの縦スクロールバーに近いグレー */
   --input-bg: #ffffff;          /* 入力欄・操作コントロールの背景 */
 
@@ -28,6 +29,7 @@
     --accent: #57a6dd;
     --accent-soft: #2b323c;
     --danger: #e0727a;
+    --ok: #5cc27e;
     --scrollbar-thumb: #586272;
     --input-bg: #2b323c;  /* 背景より明るくして入力欄を見分けやすく */
   }
@@ -43,6 +45,7 @@
   --accent: #57a6dd;
   --accent-soft: #233141;
   --danger: #e0727a;
+  --ok: #5cc27e;
   --scrollbar-thumb: #586272;
   --input-bg: #2b323c;
 }

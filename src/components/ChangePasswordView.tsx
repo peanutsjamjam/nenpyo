@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScrollText, ArrowLeft } from 'lucide-react'
+import { ScrollText, ArrowLeft, Eye } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 
@@ -15,6 +15,28 @@ export function ChangePasswordView({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  // 目アイコンを押している間だけパスワードを表示する（新規・確認の2欄）。
+  const [showNew, setShowNew] = useState(false)
+  const [showNew2, setShowNew2] = useState(false)
+
+  // 押下中だけ true にする目アイコンボタン。離す/外れる/タッチ終了で false に戻す。
+  const revealBtn = (reveal: (v: boolean) => void) => ({
+    type: 'button' as const,
+    className: 'pw-reveal',
+    tabIndex: -1,
+    title: t('changePassword.reveal'),
+    'aria-label': t('changePassword.reveal'),
+    onMouseDown: () => reveal(true),
+    onMouseUp: () => reveal(false),
+    onMouseLeave: () => reveal(false),
+    onTouchStart: (e: React.TouchEvent) => { e.preventDefault(); reveal(true) },
+    onTouchEnd: () => reveal(false),
+  })
+
+  // 両欄に1文字以上の入力があって一致しているか。枠の色付けと送信ボタンの活性に使う。
+  const bothFilled = next !== '' && next2 !== ''
+  const matches = bothFilled && next === next2
+  const matchClass = bothFilled ? (matches ? ' match' : ' mismatch') : ''
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,17 +71,23 @@ export function ChangePasswordView({ onDone }: { onDone: () => void }) {
               onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus />
           </label>
           <label>{t('changePassword.new')}
-            <input type="password" value={next} maxLength={128}
-              onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
+            <div className={'pw-field' + matchClass}>
+              <input type={showNew ? 'text' : 'password'} value={next} maxLength={128}
+                onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
+              <button {...revealBtn(setShowNew)}><Eye size={16} /></button>
+            </div>
           </label>
           <label>{t('changePassword.confirm')}
-            <input type="password" value={next2} maxLength={128}
-              onChange={(e) => setNext2(e.target.value)} autoComplete="new-password" />
+            <div className={'pw-field' + matchClass}>
+              <input type={showNew2 ? 'text' : 'password'} value={next2} maxLength={128}
+                onChange={(e) => setNext2(e.target.value)} autoComplete="new-password" />
+              <button {...revealBtn(setShowNew2)}><Eye size={16} /></button>
+            </div>
           </label>
 
           {error && <div className="auth-error">{error}</div>}
 
-          <button type="submit" className="auth-submit" disabled={busy}>
+          <button type="submit" className="auth-submit" disabled={busy || !matches}>
             {busy ? '…' : t('changePassword.submit')}
           </button>
           <button type="button" className="auth-back" onClick={onDone}>
