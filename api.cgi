@@ -6,6 +6,7 @@ use DBI;
 use JSON::PP;
 use Digest::SHA qw(hmac_sha256);
 use MIME::Base64 ();
+use File::Basename qw(dirname);
 
 # nenpyo (歴史年表) API  (CGI / Perl + PostgreSQL)
 #
@@ -25,6 +26,7 @@ use MIME::Base64 ();
 #   POST   ?action=logout                          -> ログアウト
 #   POST   ?action=change_password {current_password,new_password} -> パスワード変更
 #   DELETE ?action=account                         -> アカウント削除（関連データを全消去）
+#   GET    ?action=env                             -> {env}（実行環境名。env.pl 由来）
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
@@ -51,6 +53,14 @@ my $SESSION_DAYS = 30;
 my $PBKDF2_ITER  = 120000;
 my $SIGNUP_TOKEN_HOURS = 1;                 # サインアップ用リンクの有効期限
 my $MAIL_FROM    = 'nenpyo@peanutsjamjam.jp'; # 確認メールの差出人
+
+# 実行環境名。api.cgi と同じディレクトリの env.pl（git 管理外。dev/本番で内容が異なる）を
+# require し、その中で $main::NENPYO_ENV を設定する。未設置なら 'unknown'。
+our $NENPYO_ENV = 'unknown';
+{
+    my $env_file = dirname(__FILE__) . '/env.pl';
+    require $env_file if -f $env_file;
+}
 
 my $JSON = JSON::PP->new->utf8->canonical;
 
@@ -429,6 +439,11 @@ my $method = uc($ENV{REQUEST_METHOD} || 'GET');
 my $action = query_param('action') || '';
 
 eval {
+    # 環境名（dev / production など）は DB 不要で返せるよう、接続前に処理する。
+    if ($action eq 'env' && $method eq 'GET') {
+        respond({ env => $NENPYO_ENV });
+    }
+
     my $dbh = db();
 
     if ($action eq 'signup_request' && $method eq 'POST') {

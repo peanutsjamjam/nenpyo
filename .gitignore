@@ -11,6 +11,9 @@ dist-ssr
 # Claude Code のローカル個人設定
 .claude/settings.local.json
 
+# 環境ごとの設定（dev/本番で内容が異なる。env.pl.example をコピーして作る）
+env.pl
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
