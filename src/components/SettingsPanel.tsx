@@ -10,18 +10,19 @@ export type SettingsTab = 'appearance' | 'account' | 'behavior'
 // 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」「動作(Behavior)」は
 // ブラウザ(localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
 // どのタブを開くかは呼び出し側が決める（歯車→表示 / ユーザー名→アカウント）。
-export function SettingsPanel({ settings, setSettings, onClose, username, tab, onTabChange, onChangePassword }: {
+export function SettingsPanel({ settings, setSettings, onClose, username, email, tab, onTabChange, onChangePassword, onDeleteAccount }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   onClose: () => void
   username: string
+  email: string | null
   tab: SettingsTab
   onTabChange: (t: SettingsTab) => void
   onChangePassword: () => void
+  onDeleteAccount: () => void
 }) {
   const { t } = useTranslation()
   // アカウント欄の入力（保存処理は今後実装。今は入力状態の保持のみ）。
-  const [accEmail, setAccEmail] = useState('')
   const [accBio, setAccBio] = useState('')
   // どの修飾キーにも「拡大縮小」が割り当てられていなければ、倍率・反転は無効化
   const zoomUsed = settings.wheelPlain === 'zoom' || settings.wheelShift === 'zoom' || settings.wheelCtrl === 'zoom'
@@ -201,16 +202,16 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
 
       {tab === 'account' && (<>
       <section className="settings-section">
-        <h3 className="settings-label">{t('settings.account.username')}</h3>
+        <h3 className="settings-label">{t('settings.account.email')}</h3>
         <div className="settings-section-body">
-          <input className="account-input" value={username} readOnly />
+          <div className="account-readonly">{email ?? '—'}</div>
         </div>
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-label">{t('settings.account.email')}</h3>
+        <h3 className="settings-label">{t('settings.account.username')}</h3>
         <div className="settings-section-body">
-          <input className="account-input" type="email" value={accEmail} onChange={(e) => setAccEmail(e.target.value)} autoComplete="email" />
+          <div className="account-readonly">{username}</div>
         </div>
       </section>
 
@@ -228,7 +229,12 @@ export function SettingsPanel({ settings, setSettings, onClose, username, tab, o
         </div>
       </section>
 
-      <p className="settings-note">{t('settings.account.note')}</p>
+      <section className="settings-section">
+        <h3 className="settings-label">{t('settings.account.deleteAccount')}</h3>
+        <div className="settings-section-body">
+          <button className="account-delete-btn" onClick={onDeleteAccount}>{t('settings.account.deleteAccount')}</button>
+        </div>
+      </section>
       </>)}
     </div>
   )

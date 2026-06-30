@@ -3,6 +3,12 @@
 import i18n from './i18n'
 import { daysInMonth } from './lib/calendar'
 
+// ログイン中アカウントの基本情報（me / login / signup_complete が返す）。
+export type Account = {
+  username: string
+  email: string | null
+}
+
 export type EventItem = {
   id: number
   start_year: number
@@ -85,6 +91,19 @@ function translateError(code: unknown, params: unknown, status: number): string 
   return msg === `errors.${code}` ? code : msg // 未知コードはそのまま
 }
 
+// API エラー。翻訳済みメッセージに加え、サーバーのエラーコードと、
+// （重複登録など）どの項目が原因かを示す fields を保持する。
+export class ApiError extends Error {
+  code?: string
+  fields?: string[]
+  constructor(message: string, code?: string, fields?: string[]) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.fields = fields
+  }
+}
+
 async function call<T>(method: string, action: string, opts: { id?: number; body?: unknown } = {}): Promise<T> {
   let url = `${API}?action=${action}`
   if (opts.id != null) url += `&id=${opts.id}`
@@ -97,21 +116,29 @@ async function call<T>(method: string, action: string, opts: { id?: number; body
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) {
-    const d = (data && typeof data === 'object') ? data as { error?: unknown; params?: unknown } : {}
-    throw new Error(translateError(d.error, d.params, res.status))
+    const d = (data && typeof data === 'object') ? data as { error?: unknown; params?: unknown; fields?: unknown } : {}
+    const code = typeof d.error === 'string' ? d.error : undefined
+    const fields = Array.isArray(d.fields) ? d.fields.filter((f): f is string => typeof f === 'string') : undefined
+    throw new ApiError(translateError(d.error, d.params, res.status), code, fields)
   }
   return data as T
 }
 
 export const api = {
-  me: () => call<{ username: string }>('GET', 'me'),
-  register: (username: string, password: string) =>
-    call<{ username: string }>('POST', 'register', { body: { username, password } }),
-  login: (username: string, password: string) =>
-    call<{ username: string }>('POST', 'login', { body: { username, password } }),
+  me: () => call<Account>('GET', 'me'),
+  // メール確認つきサインアップ（申請→リンク→確定の3段階）。
+  signupRequest: (email: string) =>
+    call<{ ok: true }>('POST', 'signup_request', { body: { email } }),
+  signupVerify: (token: string) =>
+    call<{ email: string }>('GET', `signup_verify&token=${encodeURIComponent(token)}`),
+  signupComplete: (token: string, username: string, password: string) =>
+    call<Account>('POST', 'signup_complete', { body: { token, username, password } }),
+  login: (email: string, password: string) =>
+    call<Account>('POST', 'login', { body: { email, password } }),
   logout: () => call<{ ok: true }>('POST', 'logout'),
   changePassword: (currentPassword: string, newPassword: string) =>
     call<{ ok: true }>('POST', 'change_password', { body: { current_password: currentPassword, new_password: newPassword } }),
+  deleteAccount: () => call<{ ok: true }>('DELETE', 'account'),
   listEvents: () => call<EventItem[]>('GET', 'events'),
   createEvent: (e: EventInput) => call<EventItem>('POST', 'event', { body: e }),
   updateEvent: (id: number, e: EventInput) => call<EventItem>('PUT', 'event', { id, body: e }),

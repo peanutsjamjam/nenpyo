@@ -15,7 +15,7 @@ import { Explorer } from './Explorer'
 const DEV_BUTTON = import.meta.env.DEV
 
 // ---- 年表本体 --------------------------------------------------------------
-export function Timeline({ username, onLogout }: { username: string; onLogout: () => void }) {
+export function Timeline({ username, email, onLogout }: { username: string; email: string | null; onLogout: () => void }) {
   const { t } = useTranslation()
   const [events, setEvents] = useState<EventItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -90,6 +90,8 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance')
   // パスワード変更画面（年表を一切出さない独立画面）の表示。
   const [showChangePassword, setShowChangePassword] = useState(false)
+  // アカウント削除の確認モーダル表示。
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
   // 歯車: 「表示」タブで設定を開く（開いていれば閉じる）。
   const openAppearance = () => { if (showSettings) setShowSettings(false); else { setSettingsTab('appearance'); setShowSettings(true) } }
@@ -469,6 +471,17 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
     onLogout()
   }
 
+  // アカウント削除を実行。成功したら（関連データはサーバー側で全消去）ログイン前へ戻す。
+  const doDeleteAccount = async () => {
+    try {
+      await api.deleteAccount()
+      setConfirmDeleteAccount(false)
+      onLogout()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const editing = isNew || selectedId != null
 
   // パスワード変更中は、ログイン画面と同様に年表 UI を出さず専用画面だけを表示する。
@@ -812,9 +825,11 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
               setSettings={setSettings}
               onClose={() => setShowSettings(false)}
               username={username}
+              email={email}
               tab={settingsTab}
               onTabChange={setSettingsTab}
               onChangePassword={() => setShowChangePassword(true)}
+              onDeleteAccount={() => setConfirmDeleteAccount(true)}
             />
           </div>
         )}
@@ -839,6 +854,18 @@ export function Timeline({ username, onLogout }: { username: string; onLogout: (
             <div className="modal-actions">
               <button onClick={() => setConfirmDeleteTagId(null)}>{t('common.cancel')}</button>
               <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id) }}>{t('common.deleteConfirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteAccount && (
+        <div className="modal-overlay" onClick={() => setConfirmDeleteAccount(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <p>{t('settings.account.deleteConfirm')}</p>
+            <div className="modal-actions">
+              <button onClick={() => setConfirmDeleteAccount(false)}>{t('common.cancel')}</button>
+              <button className="danger" onClick={doDeleteAccount}>{t('common.deleteConfirm')}</button>
             </div>
           </div>
         </div>

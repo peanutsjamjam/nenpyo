@@ -263,6 +263,9 @@
 .auth-tabs button { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 7px; font-size: 14px; color: var(--muted); font-weight: 600; }
 .auth-tabs button.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .auth-card label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+/* 重複・形式エラーの入力欄は赤枠、その下に小さくメッセージを出す。 */
+.auth-card input.input-error { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.field-error { color: var(--danger); font-size: 12px; font-weight: 600; }
 .auth-submit { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 15px; font-weight: 700; margin-top: 4px; }
 .auth-submit:hover { filter: brightness(1.05); }
 .auth-submit:disabled { opacity: 0.6; }
@@ -303,10 +306,15 @@
 .bar-height-value { flex: 0 0 auto; width: 3.5em; text-align: right; font-size: 14px; color: var(--muted); }
 /* アカウントタブの入力欄 */
 .account-input { width: 100%; }
+/* 変更不可の項目（メール・ユーザー名）。入力欄に見えないよう、枠なしの素のテキストで示す。 */
+.account-readonly { padding: 4px 2px; font-size: 15px; font-weight: 600; color: var(--text); word-break: break-all; }
 .account-input + .account-input { margin-top: 8px; }
 .account-bio { min-height: 80px; resize: vertical; line-height: 1.5; }
 .account-action-btn { border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 8px; padding: 9px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .account-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* アカウント削除ボタン（危険操作）。赤系で目立たせる。 */
+.account-delete-btn { border: 1px solid var(--danger); background: transparent; color: var(--danger); border-radius: 8px; padding: 9px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.account-delete-btn:hover { background: var(--danger); color: #fff; }
 /* 設定画面のタブ（表示 / アカウント）。見た目はログインのタブに合わせる。 */
 .settings-tabs { display: flex; gap: 6px; background: var(--panel-2); border-radius: 10px; padding: 4px; margin-bottom: 24px; }
 .settings-tabs button { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 7px; font-size: 14px; color: var(--muted); font-weight: 600; cursor: pointer; }

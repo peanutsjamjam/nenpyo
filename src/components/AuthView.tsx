@@ -1,39 +1,49 @@
 import { useRef, useState } from 'react'
-import { ScrollText } from 'lucide-react'
+import { ScrollText, MailCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api'
+import { api, ApiError, type Account } from '../api'
 
-// ---- ログイン / 新規登録 ----------------------------------------------------
-export function AuthView({ onAuthed }: { onAuthed: (username: string) => void }) {
+// ---- ログイン / 新規登録（サインアップは「メール入力→確認リンク送信」だけ） --------
+export function AuthView({ onAuthed }: { onAuthed: (acct: Account) => void }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [password2, setPassword2] = useState('')
   const [error, setError] = useState('')
+  // メール欄のエラー（重複や形式不正）。入力欄を赤く囲って下に表示する。
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({})
   const [busy, setBusy] = useState(false)
-  const usernameRef = useRef<HTMLInputElement>(null)
+  const [sent, setSent] = useState(false) // サインアップ確認メールを送信済みか
+  const emailRef = useRef<HTMLInputElement>(null)
 
   const switchMode = (m: 'login' | 'register') => {
     setMode(m)
     setError('')
-    setPassword2('')
-    usernameRef.current?.focus()
+    setFieldErrors({})
+    setSent(false)
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (mode === 'register' && password !== password2) {
-      setError(t('auth.passwordMismatch'))
-      return
-    }
+    setFieldErrors({})
     setBusy(true)
     try {
-      const fn = mode === 'login' ? api.login : api.register
-      const u = await fn(username, password)
-      onAuthed(u.username)
+      if (mode === 'login') {
+        const u = await api.login(email, password)
+        onAuthed(u)
+      } else {
+        await api.signupRequest(email)
+        setSent(true)
+      }
     } catch (err) {
+      // メールの重複・形式エラーは該当欄に表示する。
+      if (err instanceof ApiError) {
+        const fe: { email?: string } = {}
+        if (err.code === 'duplicate' && err.fields?.includes('email')) fe.email = t('errors.email_taken')
+        else if (err.code === 'email_required' || err.code === 'email_invalid') fe.email = err.message
+        if (fe.email) { setFieldErrors(fe); return }
+      }
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
@@ -51,23 +61,46 @@ export function AuthView({ onAuthed }: { onAuthed: (username: string) => void })
           <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>{t('auth.register')}</button>
         </div>
 
-        <label>{t('auth.username')}
-          <input ref={usernameRef} value={username} maxLength={50} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
-        </label>
-        <label>{t('auth.password')}
-          <input type="password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
-        </label>
-        {mode === 'register' && (
-          <label>{t('auth.passwordConfirm')}
-            <input type="password" value={password2} maxLength={128} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
+        {mode === 'login' ? (<>
+          <label>{t('auth.email')}
+            <input ref={emailRef} type="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus />
           </label>
-        )}
+          <label>{t('auth.password')}
+            <input type="password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          </label>
 
-        {error && <div className="auth-error">{error}</div>}
+          {error && <div className="auth-error">{error}</div>}
 
-        <button type="submit" className="auth-submit" disabled={busy}>
-          {busy ? '…' : mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
-        </button>
+          <button type="submit" className="auth-submit" disabled={busy}>
+            {busy ? '…' : t('auth.submitLogin')}
+          </button>
+        </>) : sent ? (<>
+          <div className="auth-success" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <MailCheck size={32} />
+            <span>{t('auth.sentTitle')}</span>
+          </div>
+          <p className="auth-sub" style={{ margin: 0 }}>{t('auth.sentBody', { email })}</p>
+          <button type="button" className="auth-back" onClick={() => { setSent(false); setEmail('') }}>{t('auth.resend')}</button>
+        </>) : (<>
+          <label>{t('auth.email')}
+            <input
+              type="email"
+              className={fieldErrors.email ? 'input-error' : ''}
+              value={email}
+              maxLength={254}
+              onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors({}) }}
+              autoComplete="email"
+              autoFocus
+            />
+            {fieldErrors.email && <span className="field-error">{fieldErrors.email}</span>}
+          </label>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <button type="submit" className="auth-submit" disabled={busy}>
+            {busy ? '…' : t('auth.submitRegister')}
+          </button>
+        </>)}
       </form>
     </div>
   )
