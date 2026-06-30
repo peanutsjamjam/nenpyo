@@ -11,9 +11,6 @@ import { SettingsPanel, type SettingsTab } from './SettingsPanel'
 import { ChangePasswordView } from './ChangePasswordView'
 import { Explorer } from './Explorer'
 
-// 開発用ボタンの表示フラグ。本番ビルドでは自動的に消える（不要になったら削除）。
-const DEV_BUTTON = import.meta.env.DEV
-
 // ---- 年表本体 --------------------------------------------------------------
 export function Timeline({ username, email, onLogout }: { username: string; email: string | null; onLogout: () => void }) {
   const { t } = useTranslation()
@@ -92,6 +89,8 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   const [showChangePassword, setShowChangePassword] = useState(false)
   // アカウント削除の確認モーダル表示。
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
+  // 開発用フラスコボタンを出すか。env.pl 由来の実行環境が development のときだけ true。
+  const [showDevButtons, setShowDevButtons] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
   // 歯車: 「表示」タブで設定を開く（開いていれば閉じる）。
   const openAppearance = () => { if (showSettings) setShowSettings(false); else { setSettingsTab('appearance'); setShowSettings(true) } }
@@ -196,6 +195,11 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   }, [reloadTags, reload])
 
   useEffect(() => { reload(); reloadTags() }, [reload, reloadTags])
+
+  // 実行環境を取得して、開発環境のときだけフラスコボタンを表示する。
+  useEffect(() => {
+    api.env().then((r) => setShowDevButtons(r.env === 'development')).catch(() => { /* 取得失敗時は非表示のまま */ })
+  }, [])
 
   // ---- 自動保存 ------------------------------------------------------------
   // テキスト欄はフォーカスが外れたとき、タグはクリックされたときに 0.5 秒後を予約し、
@@ -541,7 +545,7 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
             </button>
           </div>
         </div>
-        {DEV_BUTTON && (
+        {showDevButtons && (
           <div className="topbar-center">
             {devButtons.map((b, i) => (
               <button

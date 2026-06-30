@@ -125,6 +125,8 @@ async function call<T>(method: string, action: string, opts: { id?: number; body
 }
 
 export const api = {
+  // 実行環境名（'development' / 'production' / 'unknown'）。env.pl 由来。
+  env: () => call<{ env: string }>('GET', 'env'),
   me: () => call<Account>('GET', 'me'),
   // メール確認つきサインアップ（申請→リンク→確定の3段階）。
   signupRequest: (email: string) =>
