@@ -222,29 +222,31 @@
    精度が粗いほどフェードを広く（＝ぼやけた端）にして、確定の細かさを見た目で表す：
      日 = 1日幅の 1/8（最も鋭い） / 月 = 1月幅の 1/4 / 年 = 1年幅の 1/2（最も広い）。
    端の精度は左右で別々なので、--mask-start / --mask-end を各サイド独立に差し替える。
-   フェード幅はバー幅の 45% を上限にクランプし、単発イベントで両端フェードしても消えないようにする。
+   フェード幅は最小 2px を下限にして、ズームアウトで1単位が極小になっても隣り合うバーが
+   繋がって見えないようにする。同時にバー幅の 45% を上限にクランプし、単発イベントで
+   両端フェードしても消えないようにする（min(max(…, 2px), 45%)）。
    継続中(ongoing)の端はフェードせず、カチッとした直角の四角のまま。 */
 .chart-bar.cap-start { /* 日精度・開始 */
   border-top-left-radius: 0; border-bottom-left-radius: 0;
-  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--day-px, 0px), 45%) / 8));
+  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--day-px, 0px) / 8, 2px), 45%));
 }
 .chart-bar.cap-end { /* 日精度・終了 */
   border-top-right-radius: 0; border-bottom-right-radius: 0;
-  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--day-px, 0px), 45%) / 8), #0000 100%);
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--day-px, 0px) / 8, 2px), 45%)), #0000 100%);
 }
 .chart-bar.soft-start { /* 月精度・開始（軽い角丸のまま） */
   border-top-left-radius: 4px; border-bottom-left-radius: 4px;
-  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--month-px, 0px), 45%) / 4));
+  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--month-px, 0px) / 4, 2px), 45%));
 }
 .chart-bar.soft-end { /* 月精度・終了 */
   border-top-right-radius: 4px; border-bottom-right-radius: 4px;
-  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--month-px, 0px), 45%) / 4), #0000 100%);
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--month-px, 0px) / 4, 2px), 45%)), #0000 100%);
 }
 .chart-bar.year-start { /* 年精度・開始（既定の丸いまま） */
-  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--year-px, 0px), 45%) / 2));
+  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--year-px, 0px) / 2, 2px), 45%));
 }
 .chart-bar.year-end { /* 年精度・終了 */
-  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--year-px, 0px), 45%) / 2), #0000 100%);
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--year-px, 0px) / 2, 2px), 45%)), #0000 100%);
 }
 /* 継続中(ongoing)の端は、角丸もキャップも使わずカチッとした直角の四角にする。 */
 .chart-bar.flat-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
