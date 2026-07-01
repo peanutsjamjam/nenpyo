@@ -111,7 +111,7 @@ const resources = {
         pickColor: 'クリックで色を選ぶ',
         name: '年表名',
         confirmDelete: 'この年表を削除しますか？',
-        deleteWithEvents: 'この年表が含むイベントを削除する',
+        deleteWithEvents: 'この年表が含むイベントも削除する',
         download: 'テキストでダウンロード',
       },
       chart: {

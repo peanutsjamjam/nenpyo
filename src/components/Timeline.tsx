@@ -918,21 +918,28 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
         </div>
       )}
 
-      {confirmDeleteTagId != null && (
+      {confirmDeleteTagId != null && (() => {
+        // フォロー取込みの仮想年表は配下イベントを消せない（元は他人の年表）ので、
+        // 「イベントも削除する」チェックボックスは出さない。
+        const isVirtual = tags.find((x) => x.id === confirmDeleteTagId)?.virtual_nenpyo_id != null
+        return (
         <div className="modal-overlay" onClick={() => setConfirmDeleteTagId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <p>{t('timeline.confirmDelete')}</p>
-            <label className="modal-check">
-              <input type="checkbox" checked={deleteTagWithEvents} onChange={(e) => setDeleteTagWithEvents(e.target.checked)} />
-              <span>{t('timeline.deleteWithEvents')}</span>
-            </label>
+            {!isVirtual && (
+              <label className="modal-check">
+                <input type="checkbox" checked={deleteTagWithEvents} onChange={(e) => setDeleteTagWithEvents(e.target.checked)} />
+                <span>{t('timeline.deleteWithEvents')}</span>
+              </label>
+            )}
             <div className="modal-actions">
               <button onClick={() => setConfirmDeleteTagId(null)}>{t('common.cancel')}</button>
-              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id, deleteTagWithEvents) }}>{t('common.deleteConfirm')}</button>
+              <button className="danger" onClick={() => { const id = confirmDeleteTagId; setConfirmDeleteTagId(null); deleteTag(id, !isVirtual && deleteTagWithEvents) }}>{t('common.deleteConfirm')}</button>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {confirmDeleteAccount && (
         <div className="modal-overlay" onClick={() => setConfirmDeleteAccount(false)}>
