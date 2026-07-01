@@ -39,6 +39,13 @@ export type DevUserData = {
   events: DevUserEvent[]
 }
 
+// 配色パターン（color_schemes が返す）。設定のテーマ選択・開発用配色画面で使う。
+export type ColorScheme = {
+  id: number
+  name: string
+  colors: { id: number; color: string }[]
+}
+
 export type EventItem = {
   id: number
   start_year: number
@@ -161,6 +168,17 @@ export const api = {
   listUsers: () => call<DevUser[]>('GET', 'dev_users'),
   // 開発用: 指定ユーザーの年表＋イベント（開発環境のみ）。
   devUserTimeline: (id: number) => call<DevUserData>('GET', 'dev_user_timeline', { id }),
+  // 配色パターン一覧（要ログイン）。設定のテーマ選択・開発用配色画面で使う。
+  colorSchemes: () => call<ColorScheme[]>('GET', 'color_schemes'),
+  // 開発用: 配色名を更新（開発環境のみ）。
+  devUpdateColorSchemeName: (id: number, name: string) =>
+    call<{ id: number; name: string }>('PUT', 'dev_color_scheme', { id, body: { name } }),
+  // 開発用: 配色内の1色を更新（開発環境のみ）。
+  devUpdateColor: (id: number, color: string) =>
+    call<{ id: number; color: string }>('PUT', 'dev_color', { id, body: { color } }),
+  // 開発用: 配色の並び順を配列順に更新（開発環境のみ）。
+  devReorderColorSchemes: (ids: number[]) =>
+    call<{ ok: true }>('POST', 'dev_color_schemes_reorder', { body: { ids } }),
   me: () => call<Account>('GET', 'me'),
   // メール確認つきサインアップ（申請→リンク→確定の3段階）。
   signupRequest: (email: string) =>

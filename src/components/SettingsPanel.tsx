@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { type Lang } from '../i18n'
-import { type AppSettings, type Theme, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT, LABEL_FONT } from '../lib/settings'
+import { type AppSettings, type WheelAction, WHEEL_ACTIONS, ZOOM_FACTORS, BAR_HEIGHT, ROW_HEIGHT, LABEL_FONT } from '../lib/settings'
+import { type ColorScheme } from '../api'
 
 export type SettingsTab = 'appearance' | 'account' | 'behavior'
 
@@ -10,9 +11,10 @@ export type SettingsTab = 'appearance' | 'account' | 'behavior'
 // 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」「動作(Behavior)」は
 // ブラウザ(localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
 // どのタブを開くかは呼び出し側が決める（歯車→表示 / ユーザー名→アカウント）。
-export function SettingsPanel({ settings, setSettings, onClose, username, email, tab, onTabChange, onChangePassword, onDeleteAccount }: {
+export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, username, email, tab, onTabChange, onChangePassword, onDeleteAccount }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
+  colorSchemes: ColorScheme[]
   onClose: () => void
   username: string
   email: string | null
@@ -64,16 +66,31 @@ export function SettingsPanel({ settings, setSettings, onClose, username, email,
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.theme')}</h3>
         <div className="settings-section-body">
-        <div className="theme-options">
-          {(['light', 'dark'] as Theme[]).map((th) => (
-            <button
-              key={th}
-              className={'theme-option' + (settings.theme === th ? ' selected' : '')}
-              onClick={() => setSettings((s) => ({ ...s, theme: th }))}
-            >
-              {th === 'light' ? t('settings.light') : t('settings.dark')}
-            </button>
-          ))}
+        <div className="scheme-select-row">
+          <select
+            className="scheme-select"
+            value={settings.schemeId ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              setSettings((s) => ({ ...s, schemeId: v === '' ? null : Number(v) }))
+            }}
+          >
+            <option value="">{t('settings.schemeNone')}</option>
+            {colorSchemes.map((sc) => (
+              <option key={sc.id} value={sc.id}>{sc.name}</option>
+            ))}
+          </select>
+          {(() => {
+            const sc = colorSchemes.find((x) => x.id === settings.schemeId)
+            if (!sc) return null
+            return (
+              <span className="scheme-preview">
+                {sc.colors.map((c) => (
+                  <span key={c.id} className="scheme-preview-chip" style={{ background: c.color }} title={c.color} />
+                ))}
+              </span>
+            )
+          })()}
         </div>
         </div>
       </section>

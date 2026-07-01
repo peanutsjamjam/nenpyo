@@ -29,6 +29,8 @@ export function clampLabelFont(s: number): number {
 
 export type AppSettings = {
   theme: Theme
+  // 選択中の配色パターン（color_scheme.id）。null なら配色未選択で theme の既定パレット。
+  schemeId: number | null
   lang: Lang
   invertZoom: boolean
   wheelPlain: WheelAction
@@ -46,6 +48,7 @@ export const SETTINGS_KEY = 'nenpyo-settings'
 export function loadSettings(): AppSettings {
   const defaults: AppSettings = {
     theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    schemeId: null,
     lang: detectLang(),
     invertZoom: false,
     wheelPlain: 'scroll',

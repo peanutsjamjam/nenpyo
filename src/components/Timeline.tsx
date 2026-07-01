@@ -1,16 +1,17 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag } from '../api'
+import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ColorScheme } from '../api'
 import i18n from '../i18n'
 import { type AppSettings, loadSettings, SETTINGS_KEY, clampBarHeight, clampRowHeight, clampLabelFont } from '../lib/settings'
 import { fracYear, type LaneMode } from '../lib/timeline'
-import { textColorFor } from '../lib/format'
+import { textColorFor, isLightColor, mixHex } from '../lib/format'
 import { TimelineChart } from './TimelineChart'
 import { SettingsPanel, type SettingsTab } from './SettingsPanel'
 import { ChangePasswordView } from './ChangePasswordView'
 import { Explorer } from './Explorer'
 import { DevUsers } from './DevUsers'
+import { DevColorSchemes } from './DevColorSchemes'
 
 // サイドバーの仮想「（年表に未所属）」グループ用の擬似 id（DB の nenpyo.id は正の値なので衝突しない）。
 // 展開状態(expandedTimelines)・表示/非表示(hiddenTimelines)の集合でこの id を使う。
@@ -81,9 +82,11 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   // 開発用フラスコボタン（実験用機能の割り当て先。今は未割り当て）。
   // 開発用フラスコ1: メイン領域に全ユーザー一覧（開発環境のみ）を出す。
   const [showDevUsers, setShowDevUsers] = useState(false)
+  // 開発用フラスコ2: メイン領域に配色パターン一覧・編集（開発環境のみ）を出す。
+  const [showDevSchemes, setShowDevSchemes] = useState(false)
   const devButtons = [
-    { active: showDevUsers, title: '開発用フラスコ1: 全ユーザー一覧', onClick: () => { setShowSettings(false); setShowDevUsers((v) => !v) } },
-    { active: false, title: '開発用フラスコ2', onClick: () => { /* 未割り当て */ } },
+    { active: showDevUsers, title: '開発用フラスコ1: 全ユーザー一覧', onClick: () => { setShowSettings(false); setShowDevSchemes(false); setShowDevUsers((v) => !v) } },
+    { active: showDevSchemes, title: '開発用フラスコ2: 配色一覧', onClick: () => { setShowSettings(false); setShowDevUsers(false); setShowDevSchemes((v) => !v) } },
     { active: false, title: '開発用フラスコ3', onClick: () => { /* 未割り当て */ } },
   ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
@@ -101,6 +104,11 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   // 開発用フラスコボタンを出すか。env.pl 由来の実行環境が development のときだけ true。
   const [showDevButtons, setShowDevButtons] = useState(false)
   const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  // テーマ選択用の配色パターン一覧（ログイン後に取得）。
+  const [colorSchemes, setColorSchemes] = useState<ColorScheme[]>([])
+  useEffect(() => {
+    api.colorSchemes().then(setColorSchemes).catch(() => { /* 取得失敗時はテーマ既定のまま */ })
+  }, [])
   // 歯車: 「表示」タブで設定を開く（開いていれば閉じる）。
   const openAppearance = () => { if (showSettings) setShowSettings(false); else { setSettingsTab('appearance'); setShowSettings(true) } }
   // ユーザー名: 「アカウント」タブで設定を開く。
@@ -174,6 +182,37 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme)
     document.documentElement.lang = settings.lang
+    // 選択中の配色があれば、色を CSS 変数へ上書きする。
+    //   1色目(左端) = 背景（左の年表リスト等のサブパネル背景 --panel-2 も同色）,
+    //   2色目 = ボタンエリアの背景 --panel（各種ボタン・入力欄の背景 --input-bg も同色）,
+    //   3色目 = キーカラー,
+    //   4色目 = 見出しの文字色（--heading。「年表」「設定」「テーマ」等）。
+    //   未選択・色不足なら上書きを外して data-theme の既定パレットに戻す。
+    const root = document.documentElement.style
+    const scheme = settings.schemeId != null ? colorSchemes.find((s) => s.id === settings.schemeId) : undefined
+    const cols = scheme?.colors ?? []
+    const setOrClear = (name: string, val: string | undefined) => {
+      if (val) root.setProperty(name, val); else root.removeProperty(name)
+    }
+    setOrClear('--bg', cols[0]?.color)
+    setOrClear('--panel', cols[1]?.color)
+    setOrClear('--accent', cols[2]?.color)
+    setOrClear('--panel-2', cols[0]?.color)
+    setOrClear('--heading', cols[3]?.color)
+    setOrClear('--input-bg', cols[1]?.color)
+    // 残りの変数（本文/補助文字・境界線・ソフトアクセント）は4色から派生させ、
+    // OS のダーク設定の色が残らないようにする。ネイティブ部品（チェックボックス・
+    // ドロップダウン等）も color-scheme を背景の明暗に合わせて上書きする。
+    const bg = cols[0]?.color, accent = cols[2]?.color, fg = cols[3]?.color
+    if (bg && accent && fg) {
+      root.setProperty('--text', fg)
+      root.setProperty('--muted', mixHex(fg, bg, 0.45))
+      root.setProperty('--border', mixHex(fg, bg, 0.72))
+      root.setProperty('--accent-soft', mixHex(accent, bg, 0.78))
+      root.setProperty('color-scheme', isLightColor(bg) ? 'light' : 'dark')
+    } else {
+      for (const v of ['--text', '--muted', '--border', '--accent-soft', 'color-scheme']) root.removeProperty(v)
+    }
     // 行の高さ・期間バーの太さを CSS 変数で全バー（メイン・エクスプローラー）へ反映。
     // バーは行の高さを超えないよう収める。
     const rh = clampRowHeight(settings.rowHeight)
@@ -182,7 +221,7 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
     document.documentElement.style.setProperty('--label-font', `${clampLabelFont(settings.labelFont)}px`)
     if (i18n.language !== settings.lang) i18n.changeLanguage(settings.lang)
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* 無視 */ }
-  }, [settings])
+  }, [settings, colorSchemes])
 
   const resetForm = (s = '', e = '', t = '', d = '') => {
     setStartText(s); setEndText(e); setTitle(t); setDetail(d); setOngoing(false)
@@ -704,6 +743,8 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
         <main className="editor">
           {showDevUsers ? (
               <DevUsers onClose={() => setShowDevUsers(false)} />
+            ) : showDevSchemes ? (
+              <DevColorSchemes onClose={() => setShowDevSchemes(false)} />
             ) : showExplorer ? (
               <Explorer
                 onClose={() => setShowExplorer(false)}
@@ -894,6 +935,7 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
             <SettingsPanel
               settings={settings}
               setSettings={setSettings}
+              colorSchemes={colorSchemes}
               onClose={() => setShowSettings(false)}
               username={username}
               email={email}

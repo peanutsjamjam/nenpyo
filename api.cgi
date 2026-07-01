@@ -29,6 +29,10 @@ use File::Basename qw(dirname);
 #   GET    ?action=env                             -> {env}（実行環境名。env.pl 由来）
 #   GET    ?action=dev_users                        -> 全ユーザー一覧（開発環境のみ。本番は404）
 #   GET    ?action=dev_user_timeline&id=<uid>       -> 指定ユーザーの年表+イベント（開発環境のみ）
+#   GET    ?action=color_schemes                    -> 配色パターン一覧+色（要ログイン）
+#   PUT    ?action=dev_color_scheme&id=<id>         -> 配色名を更新（開発環境のみ）
+#   PUT    ?action=dev_color&id=<id>                -> 配色内の1色を更新（開発環境のみ）
+#   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
@@ -655,6 +659,76 @@ eval {
             }
         } @$evs;
         respond({ username => $uname, nenpyo => \@nlist, events => \@elist });
+    }
+    elsif ($action eq 'color_schemes' && $method eq 'GET') {
+        # 配色パターン一覧（color_scheme + colors）。設定画面のテーマ選択と開発用配色画面で使う。
+        require_user($dbh);
+        my $schemes = $dbh->selectall_arrayref(
+            'SELECT id, name FROM color_scheme ORDER BY sort_order, id',
+            { Slice => {} }
+        );
+        my $cols = $dbh->selectall_arrayref(
+            'SELECT id, scheme_id, color FROM colors ORDER BY scheme_id, sort_order, id',
+            { Slice => {} }
+        );
+        my %by_scheme;
+        for my $c (@$cols) {
+            push @{ $by_scheme{ $c->{scheme_id} } },
+                +{ id => 0 + $c->{id}, color => $c->{color} };
+        }
+        my @out = map {
+            +{
+                id     => 0 + $_->{id},
+                name   => $_->{name},
+                colors => ($by_scheme{ $_->{id} } // []),
+            }
+        } @$schemes;
+        respond(\@out);
+    }
+    elsif ($action eq 'dev_color_scheme' && $method eq 'PUT') {
+        # 開発用: 配色名を更新。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        my $name = read_body_json()->{name};
+        $name = defined $name ? $name : '';
+        $name =~ s/^\s+|\s+$//g;
+        $name =~ s/[\r\n]/ /g;
+        fail('scheme_name_required') if $name eq '';
+        fail('scheme_name_too_long') if length($name) > 40;
+        my $n = $dbh->do('UPDATE color_scheme SET name=? WHERE id=?', undef, $name, $id);
+        fail('not_found', '404 Not Found') unless $n && $n != 0;
+        respond({ id => 0 + $id, name => $name });
+    }
+    elsif ($action eq 'dev_color' && $method eq 'PUT') {
+        # 開発用: 配色内の1色を更新。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        my $color = read_body_json()->{color};
+        $color = defined $color ? "$color" : '';
+        fail('invalid_color') unless $color =~ /^#[0-9a-fA-F]{6}$/;
+        $color = lc $color;
+        my $n = $dbh->do('UPDATE colors SET color=? WHERE id=?', undef, $color, $id);
+        fail('not_found', '404 Not Found') unless $n && $n != 0;
+        respond({ id => 0 + $id, color => $color });
+    }
+    elsif ($action eq 'dev_color_schemes_reorder' && $method eq 'POST') {
+        # 開発用: 配色の並び順を配列順に更新。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $ids = read_body_json()->{ids};
+        fail('ids_not_array') unless ref $ids eq 'ARRAY';
+        my $sth = $dbh->prepare('UPDATE color_scheme SET sort_order=? WHERE id=?');
+        my $pos = 0;
+        for my $sid (@$ids) {
+            next unless defined $sid && "$sid" =~ /^\d+$/;
+            $pos++;
+            $sth->execute($pos, 0 + $sid);
+        }
+        respond({ ok => JSON::PP::true });
     }
     elsif ($action eq 'me' && $method eq 'GET') {
         my $u = current_user($dbh);
