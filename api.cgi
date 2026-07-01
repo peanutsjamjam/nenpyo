@@ -17,21 +17,23 @@ use File::Basename qw(dirname);
 #        (nenpyo_sid) で受け渡す。パスワードは PBKDF2-HMAC-SHA256 で保存。
 #
 # エンドポイント（?action= と REQUEST_METHOD で分岐）:
-#   POST   ?action=signup_request  {email}          -> 確認リンクをメール送信（まだ登録しない）
-#          既に登録済みなら 409 {error:'duplicate', fields:['email']}
-#   GET    ?action=signup_verify&token=<t>          -> {email}（リンクの有効性確認）
-#   POST   ?action=signup_complete {token,username,password} -> 登録してログイン状態に
-#          重複時は 409 {error:'duplicate', fields:['email'|'username',...]}
-#   POST   ?action=login     {email,password}     -> ログイン（メールアドレスで認証）
+#   POST   ?action=signup_request  {email}         -> 確認リンクをメール送信（まだ登録しない）
+#                                                     既に登録済みなら 409 {error:'duplicate', fields:['email']}
+#   GET    ?action=signup_verify&token=<t>         -> {email}（リンクの有効性確認）
+#   POST   ?action=signup_complete {token,username,password}
+#                                                  -> 登録してログイン状態に
+#                                                     重複時は 409 {error:'duplicate', fields:['email'|'username',...]}
+#   POST   ?action=login     {email,password}      -> ログイン（メールアドレスで認証）
 #   POST   ?action=logout                          -> ログアウト
-#   POST   ?action=change_password {current_password,new_password} -> パスワード変更
+#   POST   ?action=change_password {current_password,new_password}
+#                                                  -> パスワード変更
 #   DELETE ?action=account                         -> アカウント削除（関連データを全消去）
 #   GET    ?action=env                             -> {env}（実行環境名。env.pl 由来）
-#   GET    ?action=dev_users                        -> 全ユーザー一覧（開発環境のみ。本番は404）
-#   GET    ?action=dev_user_timeline&id=<uid>       -> 指定ユーザーの年表+イベント（開発環境のみ）
-#   GET    ?action=color_schemes                    -> 配色パターン一覧+色（要ログイン）
-#   PUT    ?action=dev_color_scheme&id=<id>         -> 配色名を更新（開発環境のみ）
-#   PUT    ?action=dev_color&id=<id>                -> 配色内の1色を更新（開発環境のみ）
+#   GET    ?action=dev_users                       -> 全ユーザー一覧（開発環境のみ。本番は404）
+#   GET    ?action=dev_user_timeline&id=<uid>      -> 指定ユーザーの年表+イベント（開発環境のみ）
+#   GET    ?action=color_schemes                   -> 配色パターン一覧+色（要ログイン）
+#   PUT    ?action=dev_color_scheme&id=<id>        -> 配色名を更新（開発環境のみ）
+#   PUT    ?action=dev_color&id=<id>               -> 配色内の1色を更新（開発環境のみ）
 #   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
