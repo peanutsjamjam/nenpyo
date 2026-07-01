@@ -220,7 +220,7 @@
 /* 確定精度に応じて、バーを年表色のまま描き（ongoing と同じ）いちばん端をフェードさせる。
    端から「その精度の1単位ぶん」の何分の1かを使い、端で透明度が最大／内側で不透明にする。
    精度が粗いほどフェードを広く（＝ぼやけた端）にして、確定の細かさを見た目で表す：
-     日 = 1日幅の 1/8（最も鋭い） / 月 = 1月幅の 1/4 / 年 = 1年幅の 1/2（最も広い）。
+     日 = 1日幅の 1/8（最も鋭い） / 月 = 1月幅の 1/15 / 年 = 1年幅の 1/12。
    端の精度は左右で別々なので、--mask-start / --mask-end を各サイド独立に差し替える。
    フェード幅は最小 2px を下限にして、ズームアウトで1単位が極小になっても隣り合うバーが
    繋がって見えないようにする。同時にバー幅の 45% を上限にクランプし、単発イベントで
@@ -236,17 +236,17 @@
 }
 .chart-bar.soft-start { /* 月精度・開始（軽い角丸のまま） */
   border-top-left-radius: 4px; border-bottom-left-radius: 4px;
-  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--month-px, 0px) / 4, 2px), 45%));
+  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--month-px, 0px) / 15, 2px), 45%));
 }
 .chart-bar.soft-end { /* 月精度・終了 */
   border-top-right-radius: 4px; border-bottom-right-radius: 4px;
-  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--month-px, 0px) / 4, 2px), 45%)), #0000 100%);
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--month-px, 0px) / 15, 2px), 45%)), #0000 100%);
 }
 .chart-bar.year-start { /* 年精度・開始（既定の丸いまま） */
-  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--year-px, 0px) / 2, 2px), 45%));
+  --mask-start: linear-gradient(to right, #0000 0, #000 min(max(var(--year-px, 0px) / 12, 2px), 45%));
 }
 .chart-bar.year-end { /* 年精度・終了 */
-  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--year-px, 0px) / 2, 2px), 45%)), #0000 100%);
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(max(var(--year-px, 0px) / 12, 2px), 45%)), #0000 100%);
 }
 /* 継続中(ongoing)の端は、角丸もキャップも使わずカチッとした直角の四角にする。 */
 .chart-bar.flat-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
