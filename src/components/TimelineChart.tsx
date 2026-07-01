@@ -144,6 +144,11 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
   // 2px までは濃い赤、NOW_FADE_PX に近づくほど薄く、下限 0.12。
   const nowPxWidth = nowWidthFrac * (chartW || 1000)
   const nowAlpha = Math.max(0.3, 1 - Math.max(0, nowPxWidth - 2) / NOW_FADE_PX)
+  // 確定精度ごとの端フェード用に、1日／1月／1年ぶんの実ピクセル幅を CSS 変数で渡す
+  // （chartW 未計測時は 0 で、フェードなしにフォールバック）。
+  const yearPx = chartW / yearsVisible
+  const dayPx = nowWidthFrac * chartW
+  const monthPx = yearPx / 12
 
   // 画面あたりの最大縦線数。メイン領域の横幅 1000px で 25 本、横幅に比例させる。
   const maxGridLines = Math.max(2, Math.round(MAX_GRID_LINES_AT_1000PX * (chartW || 1000) / 1000))
@@ -234,7 +239,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
         onClick={() => onSelect(null)}
       >
         {/* 下端に「ビューポート高さ − 1行」の余白を足し、最下段のバーも画面最上部まで上げられるようにする */}
-        <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - rowHeight) }}>
+        <div className="chart-body" style={{ paddingBottom: Math.max(0, chartH - rowHeight), ['--day-px' as never]: `${dayPx}px`, ['--month-px' as never]: `${monthPx}px`, ['--year-px' as never]: `${yearPx}px` }}>
           <div className="chart-grid">
             {gridLines.map((g, i) => (
               <div

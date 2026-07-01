@@ -206,22 +206,46 @@
   position: absolute; top: 50%; transform: translateY(-50%);
   height: var(--bar-h, 26px); min-width: 6px; border-radius: calc(var(--bar-h, 26px) / 3);
   background: var(--accent); cursor: pointer;
+  /* 端のフェード用マスク。既定は両端とも全面不透明（＝マスクなし）。
+     確定精度の端（日=cap / 月=soft / 年=year）で片側を差し替え、両者を intersect で合成する。 */
+  --mask-start: linear-gradient(#000, #000);
+  --mask-end: linear-gradient(#000, #000);
+  -webkit-mask-image: var(--mask-start), var(--mask-end);
+  mask-image: var(--mask-start), var(--mask-end);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
 }
 /* 反応するのはバーの上だけ。かすかに明るくする。 */
 .chart-bar:hover { filter: brightness(1.1); }
-/* 年月日まで確定している端だけ、ガント風の縦キャップにする（その端の角は直角に）。
-   年のみ・年月の端は border-radius:13px のまま（丸い）。 */
-.chart-bar.cap-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-.chart-bar.cap-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.chart-bar.cap-start::before, .chart-bar.cap-end::after {
-  content: ''; position: absolute; top: -2px; bottom: -2px; width: 3px;
-  background: rgba(0, 0, 0, 0.5); border-radius: 1px; pointer-events: none;
+/* 確定精度に応じて、バーを年表色のまま描き（ongoing と同じ）いちばん端をフェードさせる。
+   端から「その精度の1単位ぶん」の何分の1かを使い、端で透明度が最大／内側で不透明にする。
+   精度が粗いほどフェードを広く（＝ぼやけた端）にして、確定の細かさを見た目で表す：
+     日 = 1日幅の 1/8（最も鋭い） / 月 = 1月幅の 1/4 / 年 = 1年幅の 1/2（最も広い）。
+   端の精度は左右で別々なので、--mask-start / --mask-end を各サイド独立に差し替える。
+   フェード幅はバー幅の 45% を上限にクランプし、単発イベントで両端フェードしても消えないようにする。
+   継続中(ongoing)の端はフェードせず、カチッとした直角の四角のまま。 */
+.chart-bar.cap-start { /* 日精度・開始 */
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--day-px, 0px), 45%) / 8));
 }
-.chart-bar.cap-start::before { left: 0; }
-.chart-bar.cap-end::after { right: 0; }
-/* 端の精度が年月のときは、軽い角丸にする（年のみは既定の丸 13px のまま）。 */
-.chart-bar.soft-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-.chart-bar.soft-end { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.chart-bar.cap-end { /* 日精度・終了 */
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--day-px, 0px), 45%) / 8), #0000 100%);
+}
+.chart-bar.soft-start { /* 月精度・開始（軽い角丸のまま） */
+  border-top-left-radius: 4px; border-bottom-left-radius: 4px;
+  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--month-px, 0px), 45%) / 4));
+}
+.chart-bar.soft-end { /* 月精度・終了 */
+  border-top-right-radius: 4px; border-bottom-right-radius: 4px;
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--month-px, 0px), 45%) / 4), #0000 100%);
+}
+.chart-bar.year-start { /* 年精度・開始（既定の丸いまま） */
+  --mask-start: linear-gradient(to right, #0000 0, #000 calc(min(var(--year-px, 0px), 45%) / 2));
+}
+.chart-bar.year-end { /* 年精度・終了 */
+  --mask-end: linear-gradient(to right, #000 calc(100% - min(var(--year-px, 0px), 45%) / 2), #0000 100%);
+}
 /* 継続中(ongoing)の端は、角丸もキャップも使わずカチッとした直角の四角にする。 */
 .chart-bar.flat-start { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .chart-bar.flat-end { border-top-right-radius: 0; border-bottom-right-radius: 0; }

@@ -107,7 +107,7 @@ export function barEndClasses(e: EventDates): string {
   else if (e.end_year != null) end = precisionOf(e.end_month, e.end_day)
   else end = start
   const cls = (side: 'start' | 'end', p: EndStyle) =>
-    p === 'day' ? ` cap-${side}` : p === 'month' ? ` soft-${side}` : p === 'flat' ? ` flat-${side}` : ''
+    p === 'day' ? ` cap-${side}` : p === 'month' ? ` soft-${side}` : p === 'year' ? ` year-${side}` : p === 'flat' ? ` flat-${side}` : ''
   return cls('start', start) + cls('end', end)
 }
 
