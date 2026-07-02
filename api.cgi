@@ -35,6 +35,7 @@ use File::Basename qw(dirname);
 #   PUT    ?action=dev_color_scheme&id=<id>        -> 配色名を更新（開発環境のみ）
 #   PUT    ?action=dev_color&id=<id>               -> 配色内の1色を更新（開発環境のみ）
 #   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
+#   POST   ?action=dev_color_scheme_copy&id=<id>   -> 配色を複製して新規作成（開発環境のみ）
 #   GET    ?action=me                              -> {username} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
@@ -731,6 +732,47 @@ eval {
             $sth->execute($pos, 0 + $sid);
         }
         respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'dev_color_scheme_copy' && $method eq 'POST') {
+        # 開発用: 既存の配色を複製して新規作成（色もそのままコピー）。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        my $src = $dbh->selectrow_hashref('SELECT id, name FROM color_scheme WHERE id=?', undef, $id);
+        fail('not_found', '404 Not Found') unless $src;
+        my $cols = $dbh->selectall_arrayref(
+            'SELECT color, sort_order FROM colors WHERE scheme_id=? ORDER BY sort_order, id',
+            { Slice => {} }, $id
+        );
+        my $name = $src->{name} . ' のコピー';
+        my $maxord = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order), 0) FROM color_scheme');
+        my $new_id;
+        $dbh->begin_work;
+        eval {
+            $new_id = $dbh->selectrow_array(
+                'INSERT INTO color_scheme (name, sort_order) VALUES (?, ?) RETURNING id',
+                undef, $name, $maxord + 1
+            );
+            my $ins = $dbh->prepare('INSERT INTO colors (scheme_id, color, sort_order) VALUES (?, ?, ?)');
+            for my $c (@$cols) {
+                $ins->execute($new_id, $c->{color}, $c->{sort_order});
+            }
+            $dbh->commit;
+            1;
+        } or do {
+            eval { $dbh->rollback };
+            fail('copy_failed', '500 Internal Server Error');
+        };
+        my $newcols = $dbh->selectall_arrayref(
+            'SELECT id, color FROM colors WHERE scheme_id=? ORDER BY sort_order, id',
+            { Slice => {} }, $new_id
+        );
+        respond({
+            id     => 0 + $new_id,
+            name   => $name,
+            colors => [ map { +{ id => 0 + $_->{id}, color => $_->{color} } } @$newcols ],
+        });
     }
     elsif ($action eq 'me' && $method eq 'GET') {
         my $u = current_user($dbh);

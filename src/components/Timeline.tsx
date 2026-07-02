@@ -744,7 +744,15 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
           {showDevUsers ? (
               <DevUsers onClose={() => setShowDevUsers(false)} />
             ) : showDevSchemes ? (
-              <DevColorSchemes onClose={() => setShowDevSchemes(false)} />
+              <DevColorSchemes
+                schemeId={settings.schemeId}
+                onSelectScheme={(id) => setSettings((s) => ({ ...s, schemeId: id }))}
+                onColorChanged={(sid, colorId, color) => setColorSchemes((prev) => prev.map((s) => (
+                  s.id === sid ? { ...s, colors: s.colors.map((c) => (c.id === colorId ? { ...c, color } : c)) } : s
+                )))}
+                onSchemeCreated={(sc) => setColorSchemes((prev) => [...prev, sc])}
+                onClose={() => setShowDevSchemes(false)}
+              />
             ) : showExplorer ? (
               <Explorer
                 onClose={() => setShowExplorer(false)}

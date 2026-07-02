@@ -179,6 +179,9 @@ export const api = {
   // 開発用: 配色の並び順を配列順に更新（開発環境のみ）。
   devReorderColorSchemes: (ids: number[]) =>
     call<{ ok: true }>('POST', 'dev_color_schemes_reorder', { body: { ids } }),
+  // 開発用: 配色を複製して新規作成（色ごとコピー、開発環境のみ）。新しい配色を返す。
+  devCopyColorScheme: (id: number) =>
+    call<ColorScheme>('POST', 'dev_color_scheme_copy', { id }),
   me: () => call<Account>('GET', 'me'),
   // メール確認つきサインアップ（申請→リンク→確定の3段階）。
   signupRequest: (email: string) =>

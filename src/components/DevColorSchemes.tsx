@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ChevronUp, ChevronDown } from 'lucide-react'
+import { X, ChevronUp, ChevronDown, CopyPlus } from 'lucide-react'
 import { api, type ColorScheme } from '../api'
 import { textColorFor } from '../lib/format'
 
@@ -8,7 +8,20 @@ import { textColorFor } from '../lib/format'
 //   ・色の四角（横長・カラーコード表記）をクリック → ネイティブのカラーピッカーで色を変更（確定でDB更新）。
 //   ・配色名はテキスト入力。フォーカスが外れた時に変更されていればDB更新。
 
-export function DevColorSchemes({ onClose }: { onClose: () => void }) {
+// 色の役割ラベル（並び順に対応）: 1色目=背景, 2色目=ボタン背景, 3色目=キーカラー, 4色目=見出し文字。
+const COLOR_ROLES = ['bg1', 'bg2', 'key1', 'key2']
+
+export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSchemeCreated, onClose }: {
+  // 現在選択中の配色 id（設定の schemeId）。null なら未選択。
+  schemeId: number | null
+  // ラジオで配色を切り替えたとき、直ちにその配色を適用する。
+  onSelectScheme: (id: number) => void
+  // 配色内の色を変えたとき、親の配色一覧も更新して（選択中なら）その場で再適用させる。
+  onColorChanged: (schemeId: number, colorId: number, color: string) => void
+  // 配色を複製して新規作成したとき、親の配色一覧にも追加する（設定のテーマ選択に出す）。
+  onSchemeCreated: (scheme: ColorScheme) => void
+  onClose: () => void
+}) {
   const [schemes, setSchemes] = useState<ColorScheme[] | null>(null)
   const [error, setError] = useState('')
   // 最後にサーバーへ保存済みの配色名（id→name）。onBlur で変更検知に使う。
@@ -59,6 +72,19 @@ export function DevColorSchemes({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // 配色を複製して新規作成。作成された配色を一覧末尾に追加し、親にも通知する。
+  const copyScheme = async (schemeId: number) => {
+    setError('')
+    try {
+      const created = await api.devCopyColorScheme(schemeId)
+      savedNames.current.set(created.id, created.name)
+      setSchemes((prev) => (prev ? [...prev, created] : [created]))
+      onSchemeCreated(created)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   // カラーピッカーで色が確定したらDB更新（ローカルも即反映）。
   const changeColor = async (schemeId: number, colorId: number, color: string) => {
     setSchemes((prev) => prev && prev.map((s) => (
@@ -66,6 +92,8 @@ export function DevColorSchemes({ onClose }: { onClose: () => void }) {
         ? { ...s, colors: s.colors.map((c) => (c.id === colorId ? { ...c, color } : c)) }
         : s
     )))
+    // 親（Timeline）の配色一覧も更新。選択中の配色なら適用エフェクトが再走して即反映される。
+    onColorChanged(schemeId, colorId, color)
     setError('')
     try {
       await api.devUpdateColor(colorId, color)
@@ -88,6 +116,15 @@ export function DevColorSchemes({ onClose }: { onClose: () => void }) {
           {schemes.map((s, i) => (
             <li className="dev-scheme-row" key={s.id}>
               <input
+                type="radio"
+                className="dev-scheme-radio"
+                name="dev-scheme-active"
+                title="この配色を使用"
+                aria-label="この配色を使用"
+                checked={schemeId === s.id}
+                onChange={() => onSelectScheme(s.id)}
+              />
+              <input
                 className="dev-scheme-name"
                 value={s.name}
                 maxLength={40}
@@ -98,17 +135,21 @@ export function DevColorSchemes({ onClose }: { onClose: () => void }) {
                 <button className="settings-close" onClick={() => moveScheme(s.id, -1)} disabled={i <= 0} title="上へ" aria-label="上へ"><ChevronUp size={18} /></button>
                 <button className="settings-close" onClick={() => moveScheme(s.id, 1)} disabled={i >= schemes.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
               </span>
+              <button className="settings-close" onClick={() => copyScheme(s.id)} title="この配色を複製して新規作成" aria-label="複製して新規作成"><CopyPlus size={18} /></button>
               <span className="dev-scheme-sep">：</span>
               <span className="dev-scheme-colors">
-                {s.colors.map((c) => (
-                  <label key={c.id} className="dev-scheme-swatch" style={{ background: c.color }} title={c.color}>
-                    <span className="dev-scheme-code" style={{ color: textColorFor(c.color) }}>{c.color}</span>
-                    <input
-                      type="color"
-                      value={c.color}
-                      onChange={(e) => changeColor(s.id, c.id, e.target.value)}
-                    />
-                  </label>
+                {s.colors.map((c, ci) => (
+                  <span key={c.id} className="dev-scheme-color-cell">
+                    <span className="dev-scheme-color-label">{COLOR_ROLES[ci] ?? ''}</span>
+                    <label className="dev-scheme-swatch" style={{ background: c.color }} title={c.color}>
+                      <span className="dev-scheme-code" style={{ color: textColorFor(c.color) }}>{c.color}</span>
+                      <input
+                        type="color"
+                        value={c.color}
+                        onChange={(e) => changeColor(s.id, c.id, e.target.value)}
+                      />
+                    </label>
+                  </span>
                 ))}
               </span>
             </li>
