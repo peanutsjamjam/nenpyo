@@ -423,6 +423,7 @@ sub tag_json {
         virtual_nenpyo_id => numornull($r->{virtual_nenpyo_id}), # フォロー取込みなら先 id、自分の年表は null
         virtual_dead => ($r->{virtual_dead} ? JSON::PP::true : JSON::PP::false), # フォロー先が削除済み
         owner => $r->{owner}, # フォロー先の所有者名（自分の年表・削除済みは null）
+        linked_name => $r->{linked_name}, # フォロー先の現在の年表名（自分の年表・削除済みは null）
     };
 }
 
@@ -432,7 +433,7 @@ sub list_tags_json {
     my $rows = $dbh->selectall_arrayref(
         'SELECT n.id, n.name, n.color, n.sort_order, n.virtual_nenpyo_id,
                 (n.virtual_nenpyo_id IS NOT NULL AND t.id IS NULL) AS virtual_dead,
-                ou.username AS owner
+                ou.username AS owner, t.name AS linked_name
            FROM nenpyo n
            LEFT JOIN nenpyo t ON t.id = n.virtual_nenpyo_id
            LEFT JOIN users  ou ON ou.id = t.user_id
@@ -942,7 +943,7 @@ eval {
         my $cur = $dbh->selectrow_hashref(
             'SELECT n.id, n.name, n.color, n.sort_order, n.virtual_nenpyo_id,
                     (n.virtual_nenpyo_id IS NOT NULL AND t.id IS NULL) AS virtual_dead,
-                    ou.username AS owner
+                    ou.username AS owner, t.name AS linked_name
                FROM nenpyo n
                LEFT JOIN nenpyo t ON t.id = n.virtual_nenpyo_id
                LEFT JOIN users  ou ON ou.id = t.user_id

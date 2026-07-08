@@ -85,6 +85,7 @@ export type Tag = {
   virtual_nenpyo_id: number | null // フォロー取込みなら先 nenpyo.id、自分の年表は null
   virtual_dead: boolean            // フォロー先が削除済み（名前だけ残りイベントは無い）
   owner: string | null             // フォロー先の所有者名（自分の年表・削除済みは null）
+  linked_name: string | null       // フォロー先の現在の年表名（自分の年表・削除済みは null）
 }
 
 export type TagInput = {

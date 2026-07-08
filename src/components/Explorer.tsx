@@ -85,7 +85,7 @@ export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelS
               <span className="strip-swatch" style={{ background: sel.color }} />
               <span className="chart-sel-title">{sel.ev.title || t('common.untitled')}</span>
               <span className="chart-sel-date">{formatRangeAD(sel.ev)}</span>
-              <span className="chart-sel-meta">{sel.username} / {sel.tagName}</span>
+              <span className="chart-sel-meta">{sel.tagName}@{sel.username}</span>
             </div>
             {sel.ev.detail && <div className="chart-sel-detail">{oneLine(sel.ev.detail)}</div>}
           </div>

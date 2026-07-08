@@ -153,7 +153,7 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
       <div className="strip-head">
         <span className="strip-swatch" style={{ background: tag.color }} />
         <span className="strip-tag">{tag.name}</span>
-        <span className="strip-user">{tag.username}</span>
+        <span className="strip-user">@{tag.username}</span>
         <span className="strip-count">{t('common.itemCount', { n: events.length })}</span>
         {!mine && (
           <button

@@ -918,7 +918,13 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
                   </div>
 
                   <label className="fld">
-                    <span className="fld-head">{t('timeline.name')}<span className="char-count">({nameValue.length}/40)</span></span>
+                    <span className="fld-head">
+                      {t('timeline.name')}
+                      {!isAdd && tl!.virtual_nenpyo_id != null && tl!.linked_name != null && tl!.owner != null && (
+                        <span className="linked-source">（{tl!.linked_name}@{tl!.owner}）</span>
+                      )}
+                      <span className="char-count">({nameValue.length}/40)</span>
+                    </span>
                     <input
                       autoFocus
                       value={nameValue}
