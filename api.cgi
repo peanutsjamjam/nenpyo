@@ -616,7 +616,7 @@ eval {
         fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
         require_user($dbh);
         my $rows = $dbh->selectall_arrayref(
-            'SELECT u.id, u.username, u.email, u.created_at,
+            'SELECT u.id, u.username, u.email, u.is_guest, u.expires_at, u.created_at,
                     (SELECT count(*) FROM nenpyo n WHERE n.user_id = u.id AND n.virtual_nenpyo_id IS NULL) AS nenpyo_count,
                     (SELECT count(*) FROM events e WHERE e.user_id = u.id) AS event_count
                FROM users u ORDER BY u.id',
@@ -627,6 +627,8 @@ eval {
                 id           => 0 + $_->{id},
                 username     => $_->{username},
                 email        => $_->{email},
+                is_guest     => pgbool($_->{is_guest}),
+                expires_at   => $_->{expires_at},
                 created_at   => $_->{created_at},
                 nenpyo_count => 0 + $_->{nenpyo_count},
                 event_count  => 0 + $_->{event_count},
@@ -890,51 +892,108 @@ eval {
         respond(list_tags_json($dbh, $u->{id}));
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
-        # 他ユーザーの年表と、それに含まれるイベントを返す（全公開。自分の年表は除く）。
-        # ゲスト（一時ユーザー）の年表は公開対象から除く。
+        # 他ユーザーの年表と、それに含まれるイベントを返す（自分の年表・ゲストの年表は除く）。
+        # 検索語 q があれば、空白（半角/全角/その他）で語に分割し、各語を 年表名/イベントの
+        # タイトル/詳細 に部分一致させる。語どうしは OR（いずれかの語がヒットした年表を表示）。
+        # ページング: offset/limit で年表（帯）単位に区切り、総ヒット数 total も返す
+        #             （フロントは 10件→以降20件ずつ「さらに表示」で追加取得する）。
         my $u = require_user($dbh);
+
+        # 検索語。query_param は %XX を復号した UTF-8 バイト列を返すので、DB(pg_enable_utf8)
+        # と突き合わせられるよう文字列へデコードしてから、空白で語に分割する。
+        my $q = query_param('q');
+        $q = '' unless defined $q;
+        utf8::decode($q);
+        my @tokens = grep { length } split /[\s\x{3000}]+/, $q; # 半角/全角/その他の空白で分割
+        my $has_q = @tokens > 0;
+
+        # ページ範囲。offset は 0 以上、limit は 1〜100 に丸める。
+        my $offset = query_param('offset');
+        $offset = (defined $offset && $offset =~ /^\d+$/) ? 0 + $offset : 0;
+        my $limit = query_param('limit');
+        $limit = (defined $limit && $limit =~ /^\d+$/) ? 0 + $limit : 10;
+        $limit = 1   if $limit < 1;
+        $limit = 100 if $limit > 100;
+
+        # 公開対象は「普通の年表」かつ「イベントを持つもの」のみ。検索時はさらに一致条件を足す。
+        my $where = 't.user_id <> ? AND t.virtual_nenpyo_id IS NULL AND NOT u.is_guest'
+                  . ' AND EXISTS (SELECT 1 FROM events ev WHERE ev.nenpyo_id = t.id)';
+        my @wbind = ($u->{id});
+        if ($has_q) {
+            # 各語ごとに「年表名 or イベントのタイトル/詳細」に一致する条件を作り、語どうしは OR。
+            # ILIKE のワイルドカード(% _ \)はエスケープして部分一致パターンにする。
+            my @clauses;
+            for my $tok (@tokens) {
+                (my $esc = $tok) =~ s/([\\%_])/\\$1/g;
+                my $pat = '%' . $esc . '%';
+                push @clauses, '(t.name ILIKE ? OR EXISTS (SELECT 1 FROM events e2'
+                             . ' WHERE e2.nenpyo_id = t.id AND (e2.title ILIKE ? OR e2.detail ILIKE ?)))';
+                push @wbind, $pat, $pat, $pat;
+            }
+            $where .= ' AND (' . join(' OR ', @clauses) . ')';
+        }
+
+        # 総ヒット数（年表の数）。
+        my $total = $dbh->selectrow_array(
+            "SELECT count(*) FROM nenpyo t JOIN users u ON u.id = t.user_id WHERE $where",
+            undef, @wbind
+        );
+
+        # このページに出す年表の一覧（並びを固定してページングを安定させる）。
+        my $trows = $dbh->selectall_arrayref(
+            "SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username
+               FROM nenpyo t JOIN users u ON u.id = t.user_id
+              WHERE $where
+              ORDER BY u.username, t.sort_order, t.id
+              LIMIT ? OFFSET ?",
+            { Slice => {} }, @wbind, $limit, $offset
+        );
+
         # フォロー済み = 自分の仮想年表が指すフォロー先 id の集合。
         my %followed = map { $_ => 1 }
             @{ $dbh->selectcol_arrayref('SELECT virtual_nenpyo_id FROM nenpyo WHERE user_id=? AND virtual_nenpyo_id IS NOT NULL', undef, $u->{id}) };
-        # 公開対象は「普通の年表」のみ（フォロー取込みの仮想年表・ゲストの年表は出さない）。
-        my $rows = $dbh->selectall_arrayref(
-            'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
-                    e.id AS event_id, e.start_year, e.start_month, e.start_day,
-                    e.end_year, e.end_month, e.end_day, e.title, e.detail, e.ongoing
-               FROM nenpyo t
-               JOIN users u ON u.id = t.user_id
-               JOIN events e ON e.nenpyo_id = t.id
-              WHERE t.user_id <> ? AND t.virtual_nenpyo_id IS NULL AND NOT u.is_guest
-              ORDER BY u.username, t.sort_order, t.id,
-                       e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
-            { Slice => {} }, $u->{id}
-        );
-        my (@list, %idx);
-        for my $r (@$rows) {
+
+        my (@list, %idx, @ids);
+        for my $r (@$trows) {
             my $tid = 0 + $r->{tag_id};
-            unless (exists $idx{$tid}) {
-                push @list, {
-                    tag_id => $tid, name => $r->{tag_name},
-                    color => $r->{color}, username => $r->{username}, events => [],
-                    followed => $followed{$tid} ? JSON::PP::true : JSON::PP::false,
-                };
-                $idx{$tid} = $#list;
-            }
-            next unless defined $r->{event_id};
-            push @{ $list[$idx{$tid}]{events} }, {
-                id          => 0 + $r->{event_id},
-                start_year  => 0 + $r->{start_year},
-                start_month => numornull($r->{start_month}),
-                start_day   => numornull($r->{start_day}),
-                end_year    => numornull($r->{end_year}),
-                end_month   => numornull($r->{end_month}),
-                end_day     => numornull($r->{end_day}),
-                title       => $r->{title},
-                detail      => $r->{detail},
-                ongoing     => pgbool($r->{ongoing}),
+            push @ids, $tid;
+            push @list, {
+                tag_id => $tid, name => $r->{tag_name},
+                color => $r->{color}, username => $r->{username}, events => [],
+                followed => $followed{$tid} ? JSON::PP::true : JSON::PP::false,
             };
+            $idx{$tid} = $#list;
         }
-        respond(\@list);
+
+        # ページ内の年表に属するイベントをまとめて取得し、各帯へ日付順に振り分ける。
+        if (@ids) {
+            my $ph = join(',', ('?') x @ids);
+            my $erows = $dbh->selectall_arrayref(
+                "SELECT e.id AS event_id, e.nenpyo_id, e.start_year, e.start_month, e.start_day,
+                        e.end_year, e.end_month, e.end_day, e.title, e.detail, e.ongoing
+                   FROM events e
+                  WHERE e.nenpyo_id IN ($ph)
+                  ORDER BY e.nenpyo_id, e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id",
+                { Slice => {} }, @ids
+            );
+            for my $r (@$erows) {
+                my $i = $idx{ 0 + $r->{nenpyo_id} };
+                next unless defined $i;
+                push @{ $list[$i]{events} }, {
+                    id          => 0 + $r->{event_id},
+                    start_year  => 0 + $r->{start_year},
+                    start_month => numornull($r->{start_month}),
+                    start_day   => numornull($r->{start_day}),
+                    end_year    => numornull($r->{end_year}),
+                    end_month   => numornull($r->{end_month}),
+                    end_day     => numornull($r->{end_day}),
+                    title       => $r->{title},
+                    detail      => $r->{detail},
+                    ongoing     => pgbool($r->{ongoing}),
+                };
+            }
+        }
+        respond({ strips => \@list, total => 0 + $total });
     }
     elsif ($action eq 'tag' && $method eq 'POST') {
         my $u = require_user($dbh);

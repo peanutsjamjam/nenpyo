@@ -672,6 +672,7 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
             </div>
             {!timelinesCollapsed && (<>
             {timelines.length === 0 && <p className="tag-empty">{t('sidebar.emptyTimelines')}</p>}
+            <div className="tag-list-scroll">
             <ul className="tag-list">
               {timelines.map((tl) => {
                 const tEvents = eventsByTimeline.get(tl.id) ?? []
@@ -749,6 +750,9 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
                 )
               })()}
             </ul>
+            {/* 未ログイン（ゲスト）のときは、年表リストの直下に自動削除の注意書きを出す。 */}
+            {isGuest && <p className="guest-note">{t('sidebar.guestNote')}</p>}
+            </div>
             </>)}
           </div>
         </aside>

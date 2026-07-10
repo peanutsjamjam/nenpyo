@@ -94,6 +94,8 @@ export function DevUsers({ onClose }: { onClose: () => void }) {
                 <th>ID</th>
                 <th>ユーザー名</th>
                 <th>メールアドレス</th>
+                <th>ゲスト</th>
+                <th>失効日時</th>
                 <th className="num">年表数</th>
                 <th className="num">イベント数</th>
                 <th>作成日時</th>
@@ -109,6 +111,8 @@ export function DevUsers({ onClose }: { onClose: () => void }) {
                   <td>{u.id}</td>
                   <td>{u.username}</td>
                   <td>{u.email ?? '—'}</td>
+                  <td>{u.is_guest ? '✓' : '—'}</td>
+                  <td>{u.expires_at ?? '—'}</td>
                   <td className="num">{u.nenpyo_count}</td>
                   <td className="num">{u.event_count}</td>
                   <td>{u.created_at}</td>

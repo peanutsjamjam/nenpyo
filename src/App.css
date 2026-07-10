@@ -121,11 +121,23 @@
 /* 左右はメイン領域の余白いっぱいまで広げる（余白クリックでも帯選択を解除できるように）。
    見た目は内側パディングで従来どおり。 */
 .explorer { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; margin: 0 -20px; padding: 0 20px; }
-.explorer-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
-.explorer-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 700; color: var(--text); }
+.explorer-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+.explorer-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 20px; font-weight: 700; color: var(--text); white-space: nowrap; }
+/* 年表検索: 入力欄＋右端の虫眼鏡。エクスプローラ領域の左右中央に配置する。 */
+.explorer-search { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; width: min(360px, 50%);
+  border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); padding: 0 4px 0 10px; }
+.explorer-search input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--text); font-size: 14px; padding: 7px 0; outline: none; }
+.explorer-search-btn { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
+.explorer-search-btn:hover { color: var(--accent); }
 .explorer-note { color: var(--muted); line-height: 1.8; }
 /* プライムイベント表示領域（帯）を縦に並べる */
 .explorer-strips { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px; }
+/* 「さらに表示」ボタン（帯一覧の一番下、中央）。 */
+.explorer-more { display: flex; justify-content: center; padding: 4px 0 8px; }
+.explorer-more-btn { border: 1px solid var(--border); background: var(--input-bg); color: var(--text);
+  border-radius: 999px; padding: 8px 24px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.explorer-more-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.explorer-more-btn:disabled { opacity: 0.5; cursor: default; }
 .strip { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; background: var(--panel); cursor: pointer; }
 /* 選択中の年表（帯）はキーカラー（アクセント）で囲む */
 .strip.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
@@ -493,7 +505,12 @@
 .tag-add-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tag-add-row input { flex: 1; min-width: 0; padding: 6px 8px; font-size: 14px; }
 .tag-empty { color: var(--muted); font-size: 13px; margin: 4px 0; }
-.tag-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; }
+/* 未ログイン時、年表リストの直下に出す自動削除の注意書き */
+.guest-note { color: var(--muted); font-size: 16px; line-height: 1.5; margin: 8px 4px 0; }
+/* 年表リストとゲスト注意書きをまとめてスクロールさせる領域（リスト自体は自然な高さにし、
+   注意書きがリストの一番下ではなくリスト直下に来るようにする）。 */
+.tag-list-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.tag-list { list-style: none; margin: 0; padding: 0; }
 .tag-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 0; }
 .tag-swatch { flex-shrink: 0; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); }
 /* 色を持たない（prime でない）タグの見本: 中身なしの四角 */

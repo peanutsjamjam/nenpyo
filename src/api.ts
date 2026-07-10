@@ -16,6 +16,8 @@ export type DevUser = {
   id: number
   username: string
   email: string | null
+  is_guest: boolean
+  expires_at: string | null   // ゲストの失効時刻。通常アカウントは null
   created_at: string
   nenpyo_count: number
   event_count: number
@@ -119,6 +121,12 @@ export type ExploreTag = {
   events: ExploreEvent[]
 }
 
+// エクスプローラーの検索結果。strips は該当年表（このページ分）、total は総ヒット数。
+export type ExploreResult = {
+  strips: ExploreTag[]
+  total: number
+}
+
 const API = `${import.meta.env.BASE_URL}api.cgi`
 
 // サーバーが返すエラーコード（+補間 params）を現在の言語の文言へ翻訳する。
@@ -211,8 +219,10 @@ export const api = {
   deleteTag: (id: number, withEvents = false) =>
     call<{ ok: true }>('DELETE', withEvents ? 'tag&with_events=1' : 'tag', { id }),
   reorderTags: (ids: number[]) => call<Tag[]>('POST', 'tags_reorder', { body: { ids } }),
-  // 全ユーザーの年表（と各年表のイベント）を取得（エクスプローラー用）
-  explore: () => call<ExploreTag[]>('GET', 'explore'),
+  // 年表を検索（エクスプローラー用）。q は年表名/イベントのタイトル・詳細に部分一致。
+  // offset/limit で該当年表をページングし、strips（このページ分）と total（総ヒット数）を返す。
+  explore: (q: string, offset: number, limit: number) =>
+    call<ExploreResult>('GET', `explore&q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`),
   // フォロー（取込み年表は tags/events に仮想年表として混ざって返る）
   follow: (nenpyoId: number) => call<{ ok: true }>('POST', 'follow', { body: { nenpyo_id: nenpyoId } }),
   unfollow: (nenpyoId: number) => call<{ ok: true }>('DELETE', `follow&nenpyo_id=${nenpyoId}`),

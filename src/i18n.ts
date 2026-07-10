@@ -91,6 +91,7 @@ const resources = {
         followedFrom: '{{owner}} の年表をフォロー中',
         followDeleted: 'フォロー先の年表は削除されました（名前のみ残っています）',
         deleted: '削除済み',
+        guestNote: 'ログインしていない状態で作成された年表は数日で削除されます',
         chartPlaceholder: '「出来事を追加」から年表をつくりましょう。',
       },
       event: {
@@ -140,6 +141,10 @@ const resources = {
         following: '取り込み済み',
         followTip: 'この年表を取り込む',
         unfollowTip: '取り込みを解除',
+        search: '検索',
+        searchPlaceholder: '年表を検索',
+        noResults: '該当する年表がありません。',
+        showMore: 'さらに表示',
       },
       auth: {
         tagline: '自分だけの歴史年表をつくろう',
@@ -298,6 +303,7 @@ const resources = {
         followedFrom: 'Following {{owner}}’s timeline',
         followDeleted: 'The followed timeline was deleted (only the name remains)',
         deleted: 'deleted',
+        guestNote: 'Timelines created while logged out are deleted after a few days.',
         chartPlaceholder: 'Add events to build your timeline.',
       },
       event: {
@@ -346,6 +352,10 @@ const resources = {
         following: 'Imported',
         followTip: 'Import this timeline',
         unfollowTip: 'Remove import',
+        search: 'Search',
+        searchPlaceholder: 'Search timelines',
+        noResults: 'No matching timelines.',
+        showMore: 'Show more',
       },
       auth: {
         tagline: 'Build your own history timeline',
