@@ -24,6 +24,13 @@
 .icon-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
+/* ゲスト（未ログイン）時に右上へ出す「ログイン・新規登録」ボタン */
+.login-btn {
+  height: 34px; padding: 0 14px; border-radius: 8px;
+  background: var(--accent); border: 1px solid var(--accent); color: var(--bg);
+  font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.login-btn:hover { background: var(--accent-soft); color: var(--accent); }
 /* セグメント切替（2択モード: packed/unpacked）。選択中の側をハイライト */
 .seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg-btn {
@@ -123,13 +130,17 @@
 /* 選択中の年表（帯）はキーカラー（アクセント）で囲む */
 .strip.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .strip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+/* 左側に、フォローボタン（上）と年表名＋作成者（下）を縦に積む */
+.strip-head-main { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.strip-title { display: flex; align-items: center; gap: 8px; }
 .strip-swatch { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 3px; }
 .strip-tag { font-weight: 700; color: var(--text); }
 .strip-user { font-size: 12px; color: var(--muted); }
 .strip-count { margin-left: auto; font-size: 12px; color: var(--muted); }
-/* エクスプローラー: 年表のフォロー/解除ボタン */
+/* エクスプローラー: 年表のフォロー/解除ボタン（左上に配置） */
 .strip-follow {
-  flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 14px; font-weight: 700; padding: 5px 14px; border-radius: 999px;
   border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer;
 }
 .strip-follow:hover { background: var(--accent-soft); }

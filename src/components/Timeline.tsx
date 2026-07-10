@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, LogIn, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ColorScheme } from '../api'
 import i18n from '../i18n'
@@ -646,14 +646,12 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
           </div>
         )}
         <div className="topbar-right">
-          {isGuest ? (
-            <button className="who" title={t('nav.login')} onClick={onRequestLogin}>{t('nav.loginPrompt')}</button>
-          ) : (
+          {!isGuest && (
             <button className="who" title={t('settings.tabAccount')} onClick={openAccount}>{username}</button>
           )}
           <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={openAppearance}><Settings size={18} /></button>
           {isGuest ? (
-            <button className="icon-btn" title={t('nav.login')} aria-label={t('nav.login')} onClick={onRequestLogin}><LogIn size={18} /></button>
+            <button className="login-btn" onClick={onRequestLogin}>{t('nav.loginRegister')}</button>
           ) : (
             <button className="icon-btn" title={t('nav.logout')} aria-label={t('nav.logout')} onClick={logout}><LogOut size={18} /></button>
           )}

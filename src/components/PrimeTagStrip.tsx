@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { ArrowLeft, CheckSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatRangeAD, type ExploreTag, type ExploreEvent } from '../api'
 import { type WheelAction } from '../lib/settings'
@@ -152,19 +153,24 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
   return (
     <div className={'strip' + (selected ? ' selected' : '')} onClick={(e) => { e.stopPropagation(); onSelectStrip() }}>
       <div className="strip-head">
-        <span className="strip-swatch" style={{ background: tag.color }} />
-        <span className="strip-tag">{tag.name}</span>
-        <span className="strip-user">@{tag.username}</span>
+        <div className="strip-head-main">
+          {showFollow && (
+            <button
+              className={'strip-follow' + (tag.followed ? ' on' : '')}
+              onClick={(e) => { e.stopPropagation(); onToggleFollow() }}
+              title={tag.followed ? t('explorer.unfollowTip') : t('explorer.followTip')}
+            >
+              {tag.followed ? <CheckSquare size={15} /> : <ArrowLeft size={15} />}
+              {tag.followed ? t('explorer.following') : t('explorer.follow')}
+            </button>
+          )}
+          <div className="strip-title">
+            <span className="strip-swatch" style={{ background: tag.color }} />
+            <span className="strip-tag">{tag.name}</span>
+            <span className="strip-user">@{tag.username}</span>
+          </div>
+        </div>
         <span className="strip-count">{t('common.itemCount', { n: events.length })}</span>
-        {showFollow && (
-          <button
-            className={'strip-follow' + (tag.followed ? ' on' : '')}
-            onClick={(e) => { e.stopPropagation(); onToggleFollow() }}
-            title={tag.followed ? t('explorer.unfollowTip') : t('explorer.followTip')}
-          >
-            {tag.followed ? t('explorer.following') : t('explorer.follow')}
-          </button>
-        )}
       </div>
       <div className="chart-head">
         <div className="chart-axis">
