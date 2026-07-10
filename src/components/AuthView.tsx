@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { ScrollText, MailCheck } from 'lucide-react'
+import { ScrollText, MailCheck, ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, type Account } from '../api'
 
 // ---- ログイン / 新規登録（サインアップは「メール入力→確認リンク送信」だけ） --------
-export function AuthView({ onAuthed }: { onAuthed: (acct: Account) => void }) {
+// onCancel は、ログイン前のエクスプローラー画面へ戻るためのもの。
+export function AuthView({ onAuthed, onCancel }: { onAuthed: (acct: Account) => void; onCancel: () => void }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -101,6 +102,8 @@ export function AuthView({ onAuthed }: { onAuthed: (acct: Account) => void }) {
             {busy ? '…' : t('auth.submitRegister')}
           </button>
         </>)}
+
+        <button type="button" className="auth-back" onClick={onCancel}><ArrowLeft size={14} /> {t('common.back')}</button>
       </form>
     </div>
   )

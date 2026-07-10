@@ -3,10 +3,12 @@
 import i18n from './i18n'
 import { daysInMonth } from './lib/calendar'
 
-// ログイン中アカウントの基本情報（me / login / signup_complete が返す）。
+// ログイン中アカウントの基本情報（me / login / signup_complete / guest が返す）。
+// guest=true は、ログインせずに使い始めた一時ユーザー（数日で自動削除される）。
 export type Account = {
   username: string
   email: string | null
+  guest: boolean
 }
 
 // 開発用の全ユーザー一覧（dev_users が返す。開発環境のみ）。
@@ -184,6 +186,8 @@ export const api = {
   devCopyColorScheme: (id: number) =>
     call<ColorScheme>('POST', 'dev_color_scheme_copy', { id }),
   me: () => call<Account>('GET', 'me'),
+  // ゲスト（一時ユーザー）を作成してログイン状態にする。me が 401 のときに呼ぶ。
+  createGuest: () => call<Account>('POST', 'guest'),
   // メール確認つきサインアップ（申請→リンク→確定の3段階）。
   signupRequest: (email: string) =>
     call<{ ok: true }>('POST', 'signup_request', { body: { email } }),

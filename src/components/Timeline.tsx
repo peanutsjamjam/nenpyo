@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { ScrollText, Plus, Trash2, LogOut, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
+import { ScrollText, Plus, Trash2, LogOut, LogIn, ChevronRight, ChevronDown, ChevronUp, Settings, X, Pencil, Palette, Compass, FlaskConical, ChartBarBig, ChartNoAxesGantt, ChartBarStacked, User, Download, Link2 as LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, formatRangeAD, parseDateText, dateToText, type EventItem, type EventInput, type Tag, type ColorScheme } from '../api'
 import i18n from '../i18n'
@@ -18,7 +18,15 @@ import { DevColorSchemes } from './DevColorSchemes'
 const UNASSIGNED_ID = -1
 
 // ---- 年表本体 --------------------------------------------------------------
-export function Timeline({ username, email, onLogout }: { username: string; email: string | null; onLogout: () => void }) {
+// isGuest=true は一時ユーザー（数日で消える）。機能は本会員とほぼ同じだが、上バーには
+// ユーザー名の代わりにログインへの導線を出し、設定のアカウントタブは隠す。
+export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }: {
+  username: string
+  email: string | null
+  isGuest: boolean
+  onLogout: () => void
+  onRequestLogin: () => void
+}) {
   const { t } = useTranslation()
   const [events, setEvents] = useState<EventItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -91,8 +99,9 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
   ]
   // イベントリストのクリックでチャートを中央へ寄せるリクエスト（n でトリガー）
   const [centerReq, setCenterReq] = useState<{ id: number; n: number } | null>(null)
-  // エクスプローラー（他ユーザーの年表を探す）画面の表示
-  const [showExplorer, setShowExplorer] = useState(false)
+  // エクスプローラー（他ユーザーの年表を探す）画面の表示。ゲストは年表が空なので、
+  // まず他の人の年表が見えるエクスプローラーから始める。
+  const [showExplorer, setShowExplorer] = useState(isGuest)
   // 設定画面の表示と、ユーザー設定（テーマ等）
   const [showSettings, setShowSettings] = useState(false)
   // 設定画面で最初に開くタブ（歯車→表示 / ユーザー名→アカウント）。
@@ -637,9 +646,17 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
           </div>
         )}
         <div className="topbar-right">
-          <button className="who" title={t('settings.tabAccount')} onClick={openAccount}>{username}</button>
+          {isGuest ? (
+            <button className="who" title={t('nav.login')} onClick={onRequestLogin}>{t('nav.loginPrompt')}</button>
+          ) : (
+            <button className="who" title={t('settings.tabAccount')} onClick={openAccount}>{username}</button>
+          )}
           <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={openAppearance}><Settings size={18} /></button>
-          <button className="icon-btn" title={t('nav.logout')} onClick={logout}><LogOut size={18} /></button>
+          {isGuest ? (
+            <button className="icon-btn" title={t('nav.login')} aria-label={t('nav.login')} onClick={onRequestLogin}><LogIn size={18} /></button>
+          ) : (
+            <button className="icon-btn" title={t('nav.logout')} aria-label={t('nav.logout')} onClick={logout}><LogOut size={18} /></button>
+          )}
         </div>
       </header>
 
@@ -953,6 +970,7 @@ export function Timeline({ username, email, onLogout }: { username: string; emai
               onClose={() => setShowSettings(false)}
               username={username}
               email={email}
+              isGuest={isGuest}
               tab={settingsTab}
               onTabChange={setSettingsTab}
               onChangePassword={() => setShowChangePassword(true)}

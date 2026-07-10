@@ -11,13 +11,15 @@ export type SettingsTab = 'appearance' | 'account' | 'behavior'
 // 「アカウント(Account)」はアカウントに関する操作、「表示(Appearance)」「動作(Behavior)」は
 // ブラウザ(localStorage)に保存される設定。内容の性質が違うのでタブで切り替える。
 // どのタブを開くかは呼び出し側が決める（歯車→表示 / ユーザー名→アカウント）。
-export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, username, email, tab, onTabChange, onChangePassword, onDeleteAccount }: {
+// ゲスト（isGuest）ではアカウントタブを出さず、表示・動作だけを扱う。
+export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, username, email, isGuest, tab, onTabChange, onChangePassword, onDeleteAccount }: {
   settings: AppSettings
   setSettings: (updater: (s: AppSettings) => AppSettings) => void
   colorSchemes: ColorScheme[]
   onClose: () => void
   username: string
   email: string | null
+  isGuest: boolean
   tab: SettingsTab
   onTabChange: (t: SettingsTab) => void
   onChangePassword: () => void
@@ -36,7 +38,9 @@ export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, us
       </div>
 
       <div className="settings-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'account'} className={tab === 'account' ? 'active' : ''} onClick={() => onTabChange('account')}>{t('settings.tabAccount')}</button>
+        {!isGuest && (
+          <button role="tab" aria-selected={tab === 'account'} className={tab === 'account' ? 'active' : ''} onClick={() => onTabChange('account')}>{t('settings.tabAccount')}</button>
+        )}
         <button role="tab" aria-selected={tab === 'appearance'} className={tab === 'appearance' ? 'active' : ''} onClick={() => onTabChange('appearance')}>{t('settings.tabAppearance')}</button>
         <button role="tab" aria-selected={tab === 'behavior'} className={tab === 'behavior' ? 'active' : ''} onClick={() => onTabChange('behavior')}>{t('settings.tabBehavior')}</button>
       </div>
@@ -217,7 +221,7 @@ export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, us
       <p className="settings-note">{t('settings.savedNote')}</p>
       </>)}
 
-      {tab === 'account' && (<>
+      {tab === 'account' && !isGuest && (<>
       <section className="settings-section">
         <h3 className="settings-label">{t('settings.account.email')}</h3>
         <div className="settings-section-body">

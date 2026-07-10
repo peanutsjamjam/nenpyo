@@ -9,6 +9,7 @@ import { PrimeTagStrip } from './PrimeTagStrip'
 // ---- エクスプローラー（他ユーザーの年表を見ていく）--------------
 export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes, rowHeight }: {
   onClose: () => void
+  // ログイン中ユーザー名（ゲストを含む）。自分の年表にはフォローボタンを出さない。
   username: string
   onFollowChange?: () => void
   wheelPlain: WheelAction
@@ -65,7 +66,7 @@ export function Explorer({ onClose, username, onFollowChange, wheelPlain, wheelS
               onSelect={(ev) => setSel({ ev, username: s.username, tagName: s.name, color: s.color })}
               selected={selStripId === s.tag_id}
               onSelectStrip={() => setSelStripId(s.tag_id)}
-              mine={s.username === username}
+              showFollow={s.username !== username}
               onToggleFollow={() => toggleFollow(s)}
               wheelPlain={wheelPlain}
               wheelShift={wheelShift}

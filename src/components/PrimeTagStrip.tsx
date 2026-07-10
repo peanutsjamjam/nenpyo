@@ -10,13 +10,14 @@ import {
 // ---- プライムイベント表示領域（上バー＋期間バーのみ。下バーなし）--------------
 // あるユーザーの、ある年表に含まれるイベントだけを期間バーで表示する。
 // 表示範囲はイベント群にフィット（左右に少し余白）。各帯は独立した小さな年表。
-export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, mine, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes, rowHeight }: {
+export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStrip, showFollow, onToggleFollow, wheelPlain, wheelShift, wheelCtrl, zoomFactor, invertZoom, packLanes, rowHeight }: {
   tag: ExploreTag
   selectedId: number | null
   onSelect: (ev: ExploreEvent) => void
   selected: boolean
   onSelectStrip: () => void
-  mine: boolean
+  // フォローボタンを出すか（自分の年表と、未ログインでは出さない）。
+  showFollow: boolean
   onToggleFollow: () => void
   wheelPlain: WheelAction
   wheelShift: WheelAction
@@ -155,7 +156,7 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
         <span className="strip-tag">{tag.name}</span>
         <span className="strip-user">@{tag.username}</span>
         <span className="strip-count">{t('common.itemCount', { n: events.length })}</span>
-        {!mine && (
+        {showFollow && (
           <button
             className={'strip-follow' + (tag.followed ? ' on' : '')}
             onClick={(e) => { e.stopPropagation(); onToggleFollow() }}

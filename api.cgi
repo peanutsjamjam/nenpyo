@@ -24,6 +24,8 @@ use File::Basename qw(dirname);
 #                                                  -> 登録してログイン状態に
 #                                                     重複時は 409 {error:'duplicate', fields:['email'|'username',...]}
 #   POST   ?action=login     {email,password}      -> ログイン（メールアドレスで認証）
+#   POST   ?action=guest                           -> ゲスト（一時ユーザー）を作成してログイン状態に
+#                                                     （既にセッションがあればそれを返す）
 #   POST   ?action=logout                          -> ログアウト
 #   POST   ?action=change_password {current_password,new_password}
 #                                                  -> パスワード変更
@@ -36,7 +38,7 @@ use File::Basename qw(dirname);
 #   PUT    ?action=dev_color&id=<id>               -> 配色内の1色を更新（開発環境のみ）
 #   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
 #   POST   ?action=dev_color_scheme_copy&id=<id>   -> 配色を複製して新規作成（開発環境のみ）
-#   GET    ?action=me                              -> {username} or 401
+#   GET    ?action=me                              -> {username,email,guest} or 401
 #   GET    ?action=events                          -> 自分の出来事一覧
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
 #   PUT    ?action=event&id=<id>  {同上}           -> 更新
@@ -59,6 +61,7 @@ my $COOKIE_PATH  = $ENV{SCRIPT_NAME} || '/';
 $COOKIE_PATH =~ s#/[^/]*$#/#;   # 末尾の "api.cgi" を取り除きディレクトリ部に
 $COOKIE_PATH = '/' if $COOKIE_PATH eq '';
 my $SESSION_DAYS = 30;
+my $GUEST_DAYS   = 3;                        # ゲスト（一時ユーザー）の有効期間
 my $PBKDF2_ITER  = 120000;
 my $SIGNUP_TOKEN_HOURS = 1;                 # サインアップ用リンクの有効期限
 my $MAIL_FROM    = 'nenpyo@peanutsjamjam.jp'; # 確認メールの差出人
@@ -195,8 +198,9 @@ sub seed_examples {
 
 # ---- セッション ------------------------------------------------------------
 sub set_session_cookie {
-    my ($token) = @_;
-    my $max = $SESSION_DAYS * 24 * 3600;
+    my ($token, $days) = @_;
+    $days ||= $SESSION_DAYS;
+    my $max = $days * 24 * 3600;
     add_header("Set-Cookie: $COOKIE_NAME=$token; Path=$COOKIE_PATH; Max-Age=$max; HttpOnly; Secure; SameSite=Lax");
 }
 
@@ -217,6 +221,14 @@ sub purge_expired_signup_tokens {
     my ($dbh) = @_;
     eval { $dbh->do('DELETE FROM signup_tokens WHERE expires_at < now()'); 1 }
         or warn "purge_expired_signup_tokens failed: $@\n";
+}
+
+# 期限切れゲスト（一時ユーザー）を掃除する（ついで掃除）。users を消すと
+# その年表・イベント・セッションは ON DELETE CASCADE で道連れに削除される。
+sub purge_expired_guests {
+    my ($dbh) = @_;
+    eval { $dbh->do('DELETE FROM users WHERE is_guest AND expires_at < now()'); 1 }
+        or warn "purge_expired_guests failed: $@\n";
 }
 
 # ---- メール（サインアップ確認リンク） --------------------------------------
@@ -273,13 +285,13 @@ sub send_signup_email {
     return $ok ? 1 : 0;
 }
 
-# 現在のログインユーザー {id, username, email} を返す。未ログインなら undef。
+# 現在のログインユーザー {id, username, email, is_guest} を返す。未ログインなら undef。
 sub current_user {
     my ($dbh) = @_;
     my $token = get_cookie($COOKIE_NAME);
     return undef unless defined $token && $token =~ /^[0-9a-f]{16,128}$/;
     my $row = $dbh->selectrow_hashref(
-        'SELECT u.id, u.username, u.email FROM sessions s
+        'SELECT u.id, u.username, u.email, u.is_guest FROM sessions s
            JOIN users u ON u.id = s.user_id
           WHERE s.token = ? AND s.expires_at > now()',
         undef, $token
@@ -518,12 +530,26 @@ eval {
 
         my $salt = random_hex(16);
         my $hash = pbkdf2($password, $salt, $PBKDF2_ITER);
-        my $uid  = $dbh->selectrow_array(
-            'INSERT INTO users (username, email, password_hash, salt, iterations)
-             VALUES (?,?,?,?,?) RETURNING id',
-            undef, $username, $email, $hash, $salt, $PBKDF2_ITER
-        );
-        seed_examples($dbh, $uid);   # サンプル年表（日本 / USA）を作成
+        # ゲストとして使い始めていた場合は、そのユーザーを本会員に昇格させる（作った年表を
+        # そのまま引き継ぐ）。ゲストでなければ通常どおり新規ユーザーを作成する。
+        my $cur = current_user($dbh);
+        my $uid;
+        if ($cur && pgbool($cur->{is_guest}) == JSON::PP::true) {
+            $uid = $cur->{id};
+            $dbh->do(
+                'UPDATE users SET username=?, email=?, password_hash=?, salt=?, iterations=?,
+                                  is_guest=false, expires_at=NULL
+                  WHERE id=? AND is_guest',
+                undef, $username, $email, $hash, $salt, $PBKDF2_ITER, $uid
+            );
+        } else {
+            $uid = $dbh->selectrow_array(
+                'INSERT INTO users (username, email, password_hash, salt, iterations)
+                 VALUES (?,?,?,?,?) RETURNING id',
+                undef, $username, $email, $hash, $salt, $PBKDF2_ITER
+            );
+            seed_examples($dbh, $uid);   # 新規ユーザーにはサンプル年表（日本 / USA）を作成
+        }
         # 使い終わったトークン（同じメール宛のものも含めて）を削除する。
         $dbh->do('DELETE FROM signup_tokens WHERE lower(email) = lower(?)', undef, $email);
         my $stoken = random_hex(32);
@@ -534,7 +560,7 @@ eval {
         );
         purge_expired_sessions($dbh);
         set_session_cookie($stoken);
-        respond({ username => $username, email => $email });
+        respond({ username => $username, email => $email, guest => JSON::PP::false });
     }
     elsif ($action eq 'login' && $method eq 'POST') {
         my $body = read_body_json();
@@ -558,8 +584,9 @@ eval {
             undef, $token, $u->{id}
         );
         purge_expired_sessions($dbh);   # ついで掃除（期限切れセッションを削除）
+        purge_expired_guests($dbh);     # 期限切れゲストも掃除
         set_session_cookie($token);
-        respond({ username => $u->{username}, email => $u->{email} });
+        respond({ username => $u->{username}, email => $u->{email}, guest => JSON::PP::false });
     }
     elsif ($action eq 'logout' && $method eq 'POST') {
         my $token = get_cookie($COOKIE_NAME);
@@ -778,7 +805,34 @@ eval {
     elsif ($action eq 'me' && $method eq 'GET') {
         my $u = current_user($dbh);
         fail('not_authenticated', '401 Unauthorized') unless $u;
-        respond({ username => $u->{username}, email => $u->{email} });
+        respond({ username => $u->{username}, email => $u->{email}, guest => pgbool($u->{is_guest}) });
+    }
+    elsif ($action eq 'guest' && $method eq 'POST') {
+        # ログインせずに使い始めた人のための一時ユーザー（ゲスト）を作る。
+        # 既に有効なセッションがあれば、それ（ゲスト/本会員問わず）をそのまま返す。
+        my $cur = current_user($dbh);
+        respond({ username => $cur->{username}, email => $cur->{email}, guest => pgbool($cur->{is_guest}) })
+            if $cur;
+        purge_expired_guests($dbh);
+        # メールは持たず（ログイン不可）、ユーザー名はランダム、パスワードもランダムで埋める。
+        my $username = 'guest_' . random_hex(8);
+        my $salt = random_hex(16);
+        my $hash = pbkdf2(random_hex(16), $salt, $PBKDF2_ITER);
+        my $uid  = $dbh->selectrow_array(
+            "INSERT INTO users (username, email, password_hash, salt, iterations, is_guest, expires_at)
+             VALUES (?, NULL, ?, ?, ?, true, now() + interval '$GUEST_DAYS days') RETURNING id",
+            undef, $username, $hash, $salt, $PBKDF2_ITER
+        );
+        # セッションもゲストの失効に合わせる（ユーザー削除で CASCADE 消去されるが、期間も揃える）。
+        my $stoken = random_hex(32);
+        $dbh->do(
+            "INSERT INTO sessions (token, user_id, expires_at)
+             VALUES (?,?, now() + interval '$GUEST_DAYS days')",
+            undef, $stoken, $uid
+        );
+        purge_expired_sessions($dbh);
+        set_session_cookie($stoken, $GUEST_DAYS);
+        respond({ username => $username, email => undef, guest => JSON::PP::true });
     }
     elsif ($action eq 'events' && $method eq 'GET') {
         my $u = require_user($dbh);
@@ -854,11 +908,12 @@ eval {
     }
     elsif ($action eq 'explore' && $method eq 'GET') {
         # 他ユーザーの年表と、それに含まれるイベントを返す（全公開。自分の年表は除く）。
+        # ゲスト（一時ユーザー）の年表は公開対象から除く。
         my $u = require_user($dbh);
         # フォロー済み = 自分の仮想年表が指すフォロー先 id の集合。
         my %followed = map { $_ => 1 }
             @{ $dbh->selectcol_arrayref('SELECT virtual_nenpyo_id FROM nenpyo WHERE user_id=? AND virtual_nenpyo_id IS NOT NULL', undef, $u->{id}) };
-        # 公開対象は「普通の年表」のみ（フォロー取込みの仮想年表は出さない）。
+        # 公開対象は「普通の年表」のみ（フォロー取込みの仮想年表・ゲストの年表は出さない）。
         my $rows = $dbh->selectall_arrayref(
             'SELECT t.id AS tag_id, t.name AS tag_name, t.color, u.username,
                     e.id AS event_id, e.start_year, e.start_month, e.start_day,
@@ -866,7 +921,7 @@ eval {
                FROM nenpyo t
                JOIN users u ON u.id = t.user_id
                JOIN events e ON e.nenpyo_id = t.id
-              WHERE t.user_id <> ? AND t.virtual_nenpyo_id IS NULL
+              WHERE t.user_id <> ? AND t.virtual_nenpyo_id IS NULL AND NOT u.is_guest
               ORDER BY u.username, t.sort_order, t.id,
                        e.start_year, e.start_month NULLS FIRST, e.start_day NULLS FIRST, e.id',
             { Slice => {} }, $u->{id}
