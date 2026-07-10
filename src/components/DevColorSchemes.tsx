@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ChevronUp, ChevronDown, CopyPlus } from 'lucide-react'
+import { X, ChevronUp, ChevronDown, CopyPlus, Plus } from 'lucide-react'
 import { api, type ColorScheme } from '../api'
 import { textColorFor } from '../lib/format'
 
@@ -7,9 +7,12 @@ import { textColorFor } from '../lib/format'
 // メイン領域全体を使う。開発環境のフラスコ2から開く。文言は開発専用のため日本語固定。
 //   ・色の四角（横長・カラーコード表記）をクリック → ネイティブのカラーピッカーで色を変更（確定でDB更新）。
 //   ・配色名はテキスト入力。フォーカスが外れた時に変更されていればDB更新。
+//   ・色の右端の「＋」で色を追加できる（5色目以降は c5, c6, ... と自動命名）。
 
 // 色の役割ラベル（並び順に対応）: 1色目=背景, 2色目=ボタン背景, 3色目=キーカラー, 4色目=見出し文字。
+// 5色目以降は決まった役割が無いので c5, c6, ... とする。
 const COLOR_ROLES = ['bg1', 'bg2', 'key1', 'key2']
+const colorLabel = (ci: number) => COLOR_ROLES[ci] ?? `c${ci + 1}`
 
 export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSchemeCreated, onClose }: {
   // 現在選択中の配色 id（設定の schemeId）。null なら未選択。
@@ -85,6 +88,19 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
     }
   }
 
+  // 「＋」で配色に色を1つ追加。作成された色を末尾に足す。
+  const addColor = async (schemeId: number) => {
+    setError('')
+    try {
+      const created = await api.devAddColor(schemeId)
+      setSchemes((prev) => prev && prev.map((s) => (
+        s.id === schemeId ? { ...s, colors: [...s.colors, created] } : s
+      )))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   // カラーピッカーで色が確定したらDB更新（ローカルも即反映）。
   const changeColor = async (schemeId: number, colorId: number, color: string) => {
     setSchemes((prev) => prev && prev.map((s) => (
@@ -140,7 +156,7 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
               <span className="dev-scheme-colors">
                 {s.colors.map((c, ci) => (
                   <span key={c.id} className="dev-scheme-color-cell">
-                    <span className="dev-scheme-color-label">{COLOR_ROLES[ci] ?? ''}</span>
+                    <span className="dev-scheme-color-label">{colorLabel(ci)}</span>
                     <label className="dev-scheme-swatch" style={{ background: c.color }} title={c.color}>
                       <span className="dev-scheme-code" style={{ color: textColorFor(c.color) }}>{c.color}</span>
                       <input
@@ -151,6 +167,9 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
                     </label>
                   </span>
                 ))}
+                <button className="dev-scheme-add" onClick={() => addColor(s.id)} title="色を追加" aria-label="色を追加">
+                  <Plus size={16} />
+                </button>
               </span>
             </li>
           ))}

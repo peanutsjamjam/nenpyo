@@ -907,6 +907,9 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
             const nameValue = isAdd ? newTagName : editTagName
             const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(tl!, color) }
             const onNameChange = (v: string) => { isAdd ? setNewTagName(v) : setEditTagName(v) }
+            // 現在使用中の配色の 5色目以降（c5, c6…）。あればパレットの横に並べ、クリックで即その色に設定。
+            const scheme = colorSchemes.find((sc) => sc.id === settings.schemeId)
+            const paletteExtras = (scheme?.colors ?? []).slice(4)
             return (
               <div className="panel-overlay">
                 <div className="form">
@@ -928,11 +931,23 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
                   </div>
 
                   <div className="fld">{t('timeline.color')}
-                    <div>
+                    <div className="color-pick-row">
                       <label className="color-pick" style={{ background: swatchColor ?? '#9a6b3f' }} title={t('timeline.pickColor')}>
                         <Palette size={20} />
                         <input type="color" value={swatchColor ?? '#9a6b3f'} onChange={(ev) => onColorChange(ev.target.value)} />
                       </label>
+                      {/* 使用中の配色の c5, c6… があれば四角で並べ、クリックで即その色に設定する。 */}
+                      {paletteExtras.map((c, i) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="palette-extra-swatch"
+                          style={{ background: c.color }}
+                          title={`c${i + 5}`}
+                          aria-label={`c${i + 5}`}
+                          onClick={() => onColorChange(c.color)}
+                        />
+                      ))}
                     </div>
                   </div>
 

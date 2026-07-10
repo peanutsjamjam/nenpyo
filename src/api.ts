@@ -187,6 +187,9 @@ export const api = {
   // 開発用: 配色内の1色を更新（開発環境のみ）。
   devUpdateColor: (id: number, color: string) =>
     call<{ id: number; color: string }>('PUT', 'dev_color', { id, body: { color } }),
+  // 開発用: 配色に色を1つ追加（末尾。開発環境のみ）。作成された色 {id,color} を返す。
+  devAddColor: (schemeId: number) =>
+    call<{ id: number; color: string }>('POST', 'dev_color_add', { id: schemeId }),
   // 開発用: 配色の並び順を配列順に更新（開発環境のみ）。
   devReorderColorSchemes: (ids: number[]) =>
     call<{ ok: true }>('POST', 'dev_color_schemes_reorder', { body: { ids } }),

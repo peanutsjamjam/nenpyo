@@ -36,6 +36,7 @@ use File::Basename qw(dirname);
 #   GET    ?action=color_schemes                   -> 配色パターン一覧+色（要ログイン）
 #   PUT    ?action=dev_color_scheme&id=<id>        -> 配色名を更新（開発環境のみ）
 #   PUT    ?action=dev_color&id=<id>               -> 配色内の1色を更新（開発環境のみ）
+#   POST   ?action=dev_color_add&id=<scheme_id>    -> 配色に色を1つ追加（末尾。開発環境のみ）
 #   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
 #   POST   ?action=dev_color_scheme_copy&id=<id>   -> 配色を複製して新規作成（開発環境のみ）
 #   GET    ?action=me                              -> {username,email,guest} or 401
@@ -730,6 +731,22 @@ eval {
         my $n = $dbh->do('UPDATE colors SET color=? WHERE id=?', undef, $color, $id);
         fail('not_found', '404 Not Found') unless $n && $n != 0;
         respond({ id => 0 + $id, color => $color });
+    }
+    elsif ($action eq 'dev_color_add' && $method eq 'POST') {
+        # 開発用: 配色に色を1つ追加する（末尾に並べる）。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $id = query_param('id');   # scheme_id
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        fail('not_found', '404 Not Found')
+            unless $dbh->selectrow_array('SELECT 1 FROM color_scheme WHERE id=?', undef, $id);
+        my $color = '#808080';        # 追加時の初期色（灰色）
+        my $maxord = $dbh->selectrow_array('SELECT COALESCE(MAX(sort_order), 0) FROM colors WHERE scheme_id=?', undef, $id);
+        my $new_id = $dbh->selectrow_array(
+            'INSERT INTO colors (scheme_id, color, sort_order) VALUES (?, ?, ?) RETURNING id',
+            undef, $id, $color, $maxord + 1
+        );
+        respond({ id => 0 + $new_id, color => $color });
     }
     elsif ($action eq 'dev_color_schemes_reorder' && $method eq 'POST') {
         # 開発用: 配色の並び順を配列順に更新。開発環境のみ。
