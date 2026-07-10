@@ -12,7 +12,8 @@ use File::Basename qw(dirname);
 #
 # 配信:  Apache UserDir 配下、suexec で sugawara として実行される。
 #        そのため PostgreSQL へは peer 認証（パスワード不要）で接続できる。
-# DB:    nenpyo（users / sessions / nenpyo / events）。定義は ddl/*.sql 参照。
+# DB:    nenpyo（users / sessions / signup_tokens / nenpyo / events / color_scheme / colors）。
+#        定義は ddl/*.sql 参照。
 # 認証:  ログイン時にランダムトークンを sessions に保存し、HttpOnly Cookie
 #        (nenpyo_sid) で受け渡す。パスワードは PBKDF2-HMAC-SHA256 で保存。
 #
@@ -44,6 +45,10 @@ use File::Basename qw(dirname);
 #   POST   ?action=event     {..., nenpyo_id}      -> 追加（属する年表 id。無しは null）
 #   PUT    ?action=event&id=<id>  {同上}           -> 更新
 #   DELETE ?action=event&id=<id>                   -> 削除
+#   GET    ?action=explore&q=&offset=&limit=       -> 年表を検索（他ユーザーの公開年表＋イベント）。
+#                                                     q は空白区切りの各語を 年表名/イベントの
+#                                                     タイトル・詳細 に部分一致（語どうしは OR）。
+#                                                     {strips:[...], total:<総ヒット数>} を返す。
 #   GET    ?action=tags                            -> 自分の年表一覧（nenpyo）
 #   POST   ?action=tag       {name,color}          -> 年表作成
 #   PUT    ?action=tag&id=<id>    {name,color}     -> 年表更新

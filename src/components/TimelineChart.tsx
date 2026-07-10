@@ -250,8 +250,8 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
             ))}
             {nowInView && <div className="chart-now-line" style={{ left: `${pct(nowPos)}%`, width: `${nowWidthFrac * 100}%`, background: `rgba(226, 59, 59, ${nowAlpha})` }} />}
           </div>
-          {/* レーンごとに1行。通常は1行=1イベント、フラスコ1 ON 時は重ならない
-              イベントを同じ行にまとめる。バーが画面外でも行は残す。 */}
+          {/* レーンごとに1行。通常は1行=1イベント、表示方法トグルが packed/middle の
+              ときは重ならないイベントを同じ行にまとめる。バーが画面外でも行は残す。 */}
           {lanes.map((lane, laneIdx) => (
             <div className="chart-row" key={laneIdx}>
               <div className="chart-track">
@@ -266,7 +266,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
                   const barColor = e.nenpyo_id != null ? tagColors.get(e.nenpyo_id) : undefined
                   const title = e.title || t('common.untitled')
                   // バーが完全に画面外なら矢印で方向を示す。
-                  // フラスコ1(レーン詰め)時は文字の重なりを避けるため三角だけ表示。
+                  // レーン詰め表示（packed/middle）時は文字の重なりを避けるため三角だけ表示。
                   const offLeft = end < rangeStart
                   const offRight = s > rangeEnd
                   const labelText = offLeft

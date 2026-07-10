@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-# 開発用シード: テストユーザー user1/user2/user3 と、その年表（Primeタグ＋イベント）を作る。
-#   - パスワードは api.cgi と同じ PBKDF2-HMAC-SHA256(120000) でハッシュ化するので実際にログイン可。
+# 開発用シード: テストユーザー user1/user2/user3 と、その年表（nenpyo）＋イベントを作る。
+#   - ログインはメールアドレス方式なので、各ユーザーに <username>@example.com の email を付与し、
+#     アプリからログインできるようにする。パスワードは api.cgi と同じ PBKDF2-HMAC-SHA256(120000)。
 #   - 3人とも同じ簡易パスワード（下の $PASSWORD）。
-#   - 再実行すると同名ユーザーを一旦削除して作り直す（events/tags は CASCADE で消える）。
+#   - 再実行すると同名ユーザーを一旦削除して作り直す（events/nenpyo は CASCADE で消える）。
 #
 # 実行（DBI を持つシステム perl で。peer 認証なのでパスワード不要）:
 #   /usr/bin/perl ddl/seed_dev.pl
@@ -45,8 +46,8 @@ my $dbh = DBI->connect('dbi:Pg:dbname=nenpyo', '', '',
     { RaiseError => 1, AutoCommit => 0, pg_enable_utf8 => 1 });
 
 # ----- 投入データ -----------------------------------------------------------
-# 各ユーザー: created（過去日）, prime タグ[name,color], events[配列]
-#   event = [sy,sm,sd, ey,em,ed, title, detail, [tag名...]]
+# 各ユーザー: created（過去日）, 年表[name,color], events[配列]
+#   event = [sy,sm,sd, ey,em,ed, title, detail, [年表名...]]
 my %seed = (
   user1 => {
     created => '2026-05-03 10:12:00+09',
@@ -92,12 +93,13 @@ for my $uname (sort keys %seed) {
   # 既存の同名ユーザーは削除（events/tags は CASCADE で消える）
   $dbh->do('DELETE FROM users WHERE username = ?', undef, $uname);
 
-  my $salt = random_hex(16);
-  my $hash = pbkdf2($PASSWORD, $salt, $PBKDF2_ITER);
+  my $salt  = random_hex(16);
+  my $hash  = pbkdf2($PASSWORD, $salt, $PBKDF2_ITER);
+  my $email = "$uname\@example.com";   # ログインはメール方式なので email を付与する
   my $uid  = $dbh->selectrow_array(
-    'INSERT INTO users (username, password_hash, salt, iterations, created_at)
-     VALUES (?,?,?,?,?) RETURNING id',
-    undef, $uname, $hash, $salt, $PBKDF2_ITER, $u->{created});
+    'INSERT INTO users (username, email, password_hash, salt, iterations, created_at)
+     VALUES (?,?,?,?,?,?) RETURNING id',
+    undef, $uname, $email, $hash, $salt, $PBKDF2_ITER, $u->{created});
 
   # 年表（nenpyo）
   my %tagid;
@@ -129,4 +131,4 @@ for my $uname (sort keys %seed) {
 
 $dbh->commit;
 $dbh->disconnect;
-print "done. password for all = '$PASSWORD'\n";
+print "done. login: <username>\@example.com / password for all = '$PASSWORD'\n";

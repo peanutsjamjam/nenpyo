@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiError, type Account } from '../api'
 
 // ---- ログイン / 新規登録（サインアップは「メール入力→確認リンク送信」だけ） --------
-// onCancel は、ログイン前のエクスプローラー画面へ戻るためのもの。
+// onCancel は、この画面を閉じて背後（ゲストの年表/エクスプローラー画面）へ戻るためのもの。
 // overlay=true のときは、背後のメイン/エクスプローラー画面の上にモーダルとして重ねる
 // （外側の背景クリックで閉じられるよう、カード内クリックの伝播は止める）。
 export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (acct: Account) => void; onCancel: () => void; overlay?: boolean }) {

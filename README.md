@@ -19,7 +19,7 @@
 api.cgi (Perl CGI, suexec で sugawara 実行)
    │  DBI / DBD::Pg (peer 認証・パスワード不要)
    ▼
-PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events)
+PostgreSQL  DB: nenpyo  (users / sessions / signup_tokens / nenpyo / events / color_scheme / colors)
 ```
 
 - **フロント**: Vite + React + TypeScript。`dist/` に本番ビルド。
@@ -30,6 +30,10 @@ PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events)
   ルートと未知パスを `dist/` へ rewrite、実在ファイル（`api.cgi`）はそのまま実行。
 - **認証**: パスワードは PBKDF2-HMAC-SHA256（12万回）でハッシュ化して `users` に保存。
   ログイン時にランダムトークンを `sessions` に保存し、`nenpyo_sid` Cookie（HttpOnly/Secure/SameSite=Lax）で受け渡し。
+  - **ログインはメールアドレス＋パスワード**（`users.email` を `lower()` で一意）。
+  - **サインアップはメール確認つきの2段階**: `signup_request{email}` で確認リンクを送信（`signup_tokens` に一時保存）→ リンク先で `signup_complete{token,username,password}` して登録。
+- **ゲスト（一時ユーザー）**: 未ログインで訪れると自動で `is_guest=true`・`expires_at=now()+3日` のゲストを作成（`?action=guest`）、本会員とほぼ同機能で使える。期限切れゲストは login/guest 作成時の「ついで掃除」で `users` ごと削除。ゲスト中に本登録すると、そのゲストを本会員へ昇格させて作った年表を引き継ぐ。
+- **配色スキーム**: `color_scheme`＋`colors`。設定「表示」タブのテーマ選択、開発用フラスコ2の配色一覧で編集する。
 - **データ**: `events`。開始 `start_year`（必須・負値=紀元前）/`start_month`/`start_day`、
   終了 `end_year`/`end_month`/`end_day`（すべて任意。終了なし=単発の出来事）、`title`、`detail`、
   `nenpyo_id`（属する年表。最大1つ。未所属は NULL、年表削除時は NULL）。
@@ -50,10 +54,17 @@ PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events)
 
 | メソッド | action | 内容 |
 |---|---|---|
-| POST | register | `{username,password}` 登録してログイン |
-| POST | login | `{username,password}` ログイン |
+| POST | signup_request | `{email}` 確認リンクをメール送信（既登録は 409 duplicate(email)） |
+| GET | signup_verify&token=T | リンクの有効性確認 → `{email}` |
+| POST | signup_complete | `{token,username,password}` 登録してログイン（ゲスト中なら本会員へ昇格） |
+| POST | login | `{email,password}` ログイン（メールで認証） |
+| POST | guest | ゲスト（一時ユーザー）を作成してログイン状態に（既セッションがあればそれを返す） |
 | POST | logout | ログアウト |
-| GET | me | `{username}` / 未ログインは 401 |
+| POST | change_password | `{current_password,new_password}` パスワード変更 |
+| DELETE | account | アカウント削除（events/nenpyo/sessions を CASCADE 削除） |
+| GET | me | `{username,email,guest}` / 未ログインは 401 |
+| GET | env | `{env}` 実行環境名（env.pl 由来） |
+| GET | color_schemes | 配色スキーム一覧＋色（要ログイン） |
 | GET | events | 自分の出来事一覧（year, month, day 昇順） |
 | POST | event | `{start_year,...,title,detail,nenpyo_id}` 追加 |
 | PUT | event&id=ID | 更新（本人の項目のみ。`nenpyo_id` で所属年表を設定） |
@@ -63,27 +74,45 @@ PostgreSQL  DB: nenpyo  (users / sessions / nenpyo / events)
 | PUT | tag&id=ID | `{name,color}` 更新（本人のみ。仮想年表も色名変更可） |
 | DELETE | tag&id=ID | 削除（本人のみ。仮想年表ならフォロー解除に相当） |
 | POST | tags_reorder | `{ids:[..]}` 並び順を配列順に更新（sort_order を 1..n） |
-| GET | explore | 全ユーザーの普通年表＋イベント（各年表に `followed` 付き） |
+| GET | explore&q=&offset=&limit= | 年表を検索。q は空白区切りの各語を 年表名/イベントのタイトル・詳細 に部分一致（語どうし OR）。`{strips,total}` を返す（ゲスト・自分の年表は除外、各年表に `followed` 付き） |
 | POST | follow | `{nenpyo_id}` 年表をフォロー（name/color をコピーした仮想年表を作成） |
 | DELETE | follow&nenpyo_id=ID | フォロー解除（その仮想年表行を削除） |
+| GET/PUT/POST | dev_* | 開発用（全ユーザー一覧・配色編集など。`env=development` のみ、本番は 404） |
 
 ## 開発・公開フロー
 
+編集は dev（`~/public_html/nenpyo` → `/~sugawara/nenpyo/`）で行う。ビルド前に nvm を有効化する。
+
 ```
 cd ~/public_html/nenpyo
-npm run dev      # ローカル確認 (http://localhost:5173) ※api.cgi/DBはローカルには無い
-npm run build    # dist/ を更新 = 公開サイトに即反映
+export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"
+npm run dev      # ローカル確認 (http://localhost:5173) ※api.cgi/DB はローカルには無い
+npm run build    # dist/ を更新（dev 配信 /~sugawara/nenpyo/ に反映）
 ```
 
-ブラウザ確認時はキャッシュに注意（Ctrl+F5 / Cmd+Shift+R）。
+本番（prod: `/var/jp.peanutsjamjam.nenpyo/html`、ServerName `nenpyo.peanutsjamjam.jp`、
+Apache conf `/etc/httpd/conf.d/nenpyo.conf`）への反映は git pull + build:
+
+```
+git -C /var/jp.peanutsjamjam.nenpyo/html pull --ff-only
+npm --prefix /var/jp.peanutsjamjam.nenpyo/html run build   # フロント（src/）を変更したときのみ
+```
+
+- `api.cgi` は `git pull` だけで反映（ビルド不要）。構文確認は `/usr/bin/perl -c api.cgi`。
+- DB は dev/prod で**共有**（単一の `nenpyo`）。スキーマ変更は片方で流せば両方に効く。
+- ブラウザ確認時はキャッシュに注意（Ctrl+F5 / Cmd+Shift+R）。
 
 ## サーバー前提（セットアップ済み）
 
 - システムperl `/usr/bin/perl` に `perl-DBI` / `perl-DBD-Pg` / `perl-JSON-PP` / `perl-Digest-SHA` を導入済み
   （`sudo dnf install` で。`/usr/local/bin/perl` 5.36 には DBI が無いので注意）。
 - DB `nenpyo` は作成済み。スキーマは `ddl/` にリレーションごとに置いてある。
-  新規構築は依存順に流す: `for f in users sessions nenpyo events; do psql -d nenpyo -f ddl/$f.sql; done`。
-  既存DBの移行は `psql -d nenpyo -f ddl/migrate_virtual_nenpyo.sql`（follows → nenpyo.virtual_nenpyo_id、1回のみ）。
+  新規構築は依存順に流す:
+  `for f in users sessions signup_tokens nenpyo events color_scheme colors; do psql -d nenpyo -f ddl/$f.sql; done`。
+  既存DBの移行は `ddl/migrate_*.sql` を必要に応じて流す（各1回のみ）:
+  `migrate_virtual_nenpyo.sql`（follows → nenpyo.virtual_nenpyo_id）、
+  `migrate_users_email.sql`（users.email）、
+  `migrate_users_guest.sql`（users.is_guest / expires_at）。
 - CGI は suexec で `sugawara` として動くため、peer 認証でパスワード無し接続できる。
 
 ## 開発用シードデータ
