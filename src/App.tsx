@@ -59,18 +59,26 @@ export default function App() {
       />
     )
   }
-  if (showAuth && !realUser) return <AuthView onAuthed={onAuthed} onCancel={() => setShowAuth(false)} />
   // ゲスト作成にも失敗した（ネットワーク等）ときの最終手段としてログイン画面を出す。
   if (acct == null) return <AuthView onAuthed={onAuthed} onCancel={() => setShowAuth(false)} />
   return (
-    <Timeline
-      // アカウントが替わったら作り直す（前のユーザーの年表・イベントを残さない）。
-      key={acct.username}
-      username={acct.username}
-      email={acct.email}
-      isGuest={acct.guest}
-      onLogout={() => { setLoading(true); bootstrap() }}
-      onRequestLogin={() => setShowAuth(true)}
-    />
+    <>
+      <Timeline
+        // アカウントが替わったら作り直す（前のユーザーの年表・イベントを残さない）。
+        key={acct.username}
+        username={acct.username}
+        email={acct.email}
+        isGuest={acct.guest}
+        onLogout={() => { setLoading(true); bootstrap() }}
+        onRequestLogin={() => setShowAuth(true)}
+      />
+      {/* ログイン/新規登録は、背後のメイン・エクスプローラー画面の上に重ねて表示する。
+          背景クリックまたは「戻る」で閉じる。 */}
+      {showAuth && !realUser && (
+        <div className="auth-overlay" onClick={() => setShowAuth(false)}>
+          <AuthView overlay onAuthed={onAuthed} onCancel={() => setShowAuth(false)} />
+        </div>
+      )}
+    </>
   )
 }

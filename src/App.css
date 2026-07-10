@@ -338,6 +338,8 @@
 
 /* ---- 認証画面 ---- */
 .auth-wrap { display: grid; place-items: center; height: 100%; padding: 20px; }
+/* ログイン/新規登録をメイン・エクスプローラー画面の上にモーダルで重ねるときの背景。 */
+.auth-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: grid; place-items: center; z-index: 50; padding: 20px; }
 .auth-card {
   width: 100%; max-width: 360px; background: var(--panel); border: 1px solid var(--border);
   border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px;

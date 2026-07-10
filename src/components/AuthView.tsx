@@ -5,7 +5,9 @@ import { api, ApiError, type Account } from '../api'
 
 // ---- ログイン / 新規登録（サインアップは「メール入力→確認リンク送信」だけ） --------
 // onCancel は、ログイン前のエクスプローラー画面へ戻るためのもの。
-export function AuthView({ onAuthed, onCancel }: { onAuthed: (acct: Account) => void; onCancel: () => void }) {
+// overlay=true のときは、背後のメイン/エクスプローラー画面の上にモーダルとして重ねる
+// （外側の背景クリックで閉じられるよう、カード内クリックの伝播は止める）。
+export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (acct: Account) => void; onCancel: () => void; overlay?: boolean }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -51,9 +53,8 @@ export function AuthView({ onAuthed, onCancel }: { onAuthed: (acct: Account) => 
     }
   }
 
-  return (
-    <div className="auth-wrap">
-      <form className="auth-card" onSubmit={submit}>
+  const card = (
+    <form className="auth-card" onSubmit={submit} onClick={overlay ? (e) => e.stopPropagation() : undefined}>
         <div className="auth-logo"><ScrollText size={28} /> <span>nenpyo</span></div>
         <p className="auth-sub">{t('auth.tagline')}</p>
 
@@ -104,7 +105,10 @@ export function AuthView({ onAuthed, onCancel }: { onAuthed: (acct: Account) => 
         </>)}
 
         <button type="button" className="auth-back" onClick={onCancel}><ArrowLeft size={14} /> {t('common.back')}</button>
-      </form>
-    </div>
+    </form>
   )
+
+  // 単独表示（ゲスト作成失敗時のフォールバック等）は画面いっぱいに中央寄せ、
+  // overlay 表示は呼び出し側（App）の背景オーバーレイの中に置く。
+  return overlay ? card : <div className="auth-wrap">{card}</div>
 }
