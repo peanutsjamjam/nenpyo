@@ -62,7 +62,7 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
   const [expandedTimelines, setExpandedTimelines] = useState<Set<number>>(new Set())
   const toggleTimelineOpen = (id: number) => setExpandedTimelines((prev) => {
     const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
   // メイン領域で非表示にしている年表 id（チェックを外した年表）。localStorage に保存。
@@ -79,7 +79,7 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
   }, [hiddenTimelines])
   const toggleTimelineVisible = (id: number) => setHiddenTimelines((prev) => {
     const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
   // 期間バーをレーン詰め表示にするか（packed/unpacked）。トップバーのセグメントトグルで切替。
@@ -401,7 +401,7 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = (tl.name || 'timeline').replace(/[\/\\:*?"<>|]/g, '_') + '.txt'
+    a.download = (tl.name || 'timeline').replace(/[/\\:*?"<>|]/g, '_') + '.txt'
     document.body.appendChild(a); a.click(); a.remove()
     URL.revokeObjectURL(url)
   }
@@ -905,8 +905,8 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
             const pi = tl ? timelines.findIndex((p) => p.id === tl.id) : -1
             const swatchColor = isAdd ? newTagColor : tl!.color
             const nameValue = isAdd ? newTagName : editTagName
-            const onColorChange = (color: string) => { isAdd ? setNewTagColor(color) : pickTagColor(tl!, color) }
-            const onNameChange = (v: string) => { isAdd ? setNewTagName(v) : setEditTagName(v) }
+            const onColorChange = (color: string) => { if (isAdd) setNewTagColor(color); else pickTagColor(tl!, color) }
+            const onNameChange = (v: string) => { if (isAdd) setNewTagName(v); else setEditTagName(v) }
             // 現在使用中の配色の 5色目以降（c5, c6…）。あればパレットの横に並べ、クリックで即その色に設定。
             const scheme = colorSchemes.find((sc) => sc.id === settings.schemeId)
             const paletteExtras = (scheme?.colors ?? []).slice(4)

@@ -822,14 +822,24 @@ eval {
             if $cur;
         purge_expired_guests($dbh);
         # メールは持たず（ログイン不可）、ユーザー名はランダム、パスワードもランダムで埋める。
-        my $username = 'guest_' . random_hex(8);
+        # ユーザー名は 64bit 乱数なので衝突はほぼ無いが、万一 UNIQUE 違反になったら別名で数回まで再試行。
         my $salt = random_hex(16);
         my $hash = pbkdf2(random_hex(16), $salt, $PBKDF2_ITER);
-        my $uid  = $dbh->selectrow_array(
-            "INSERT INTO users (username, email, password_hash, salt, iterations, is_guest, expires_at)
-             VALUES (?, NULL, ?, ?, ?, true, now() + interval '$GUEST_DAYS days') RETURNING id",
-            undef, $username, $hash, $salt, $PBKDF2_ITER
-        );
+        my ($username, $uid);
+        for (1 .. 5) {
+            $username = 'guest_' . random_hex(8);
+            $uid = eval {
+                $dbh->selectrow_array(
+                    "INSERT INTO users (username, email, password_hash, salt, iterations, is_guest, expires_at)
+                     VALUES (?, NULL, ?, ?, ?, true, now() + interval '$GUEST_DAYS days') RETURNING id",
+                    undef, $username, $hash, $salt, $PBKDF2_ITER
+                );
+            };
+            last if defined $uid;                                  # 作成成功
+            fail('db_error', '500 Internal Server Error')          # 衝突以外のエラーは中断
+                unless $@ =~ /duplicate key|unique/i;
+        }
+        fail('db_error', '500 Internal Server Error') unless defined $uid;
         # セッションもゲストの失効に合わせる（ユーザー削除で CASCADE 消去されるが、期間も揃える）。
         my $stoken = random_hex(32);
         $dbh->do(
