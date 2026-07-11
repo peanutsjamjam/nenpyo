@@ -207,6 +207,26 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
     window.addEventListener('mouseup', onUp)
   }
 
+  // カーソルキー操作: メイン領域をクリック（フォーカス）した後、矢印キーでスクロールする。
+  //   ←→ … 左右にパン（ホイールのパンと同じ量。centerYear を動かす）
+  //   ↑↓ … 縦スクロール（1行ぶん。native の scrollTop を動かす）
+  // ブラウザ既定のスクロール（フォーカスした要素の上下移動やページスクロール）は抑止する。
+  const onChartKeyDown = (e: React.KeyboardEvent) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return
+    const { centerYear: cy, yearsVisible: yv } = viewRef.current
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const nc = cy + (e.key === 'ArrowRight' ? 1 : -1) * yv / 10
+      viewRef.current = { centerYear: nc, yearsVisible: yv }
+      setCenterYear(() => nc)
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      const el = scrollRef.current
+      if (!el) return
+      e.preventDefault()
+      el.scrollTop += (e.key === 'ArrowDown' ? 1 : -1) * rowHeight
+    }
+  }
+
   // 選択中のイベント（下バーに詳細を表示する）
   const selectedEvent = selectedId != null ? events.find((e) => e.id === selectedId) ?? null : null
 
@@ -236,6 +256,8 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
       <div
         className="chart-scroll"
         ref={scrollRef}
+        tabIndex={0}
+        onKeyDown={onChartKeyDown}
         onClick={() => onSelect(null)}
       >
         {/* 下端に「ビューポート高さ − 1行」の余白を足し、最下段のバーも画面最上部まで上げられるようにする */}

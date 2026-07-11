@@ -199,6 +199,8 @@
 
 /* ビューポートからはみ出すバーは左右にクリップ。縦のみスクロール。 */
 .chart-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* カーソルキー操作のためにフォーカス可能(tabIndex)だが、領域全体を囲む枠は出さない。 */
+.chart-scroll:focus { outline: none; }
 .chart-empty { color: var(--muted); text-align: center; line-height: 1.7; margin-top: 40px; }
 .chart-hint { position: relative; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; min-height: 28px; }
 .chart-hint-text { flex: 1; text-align: center; color: var(--muted); }
