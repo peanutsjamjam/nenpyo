@@ -84,7 +84,7 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
   })
   // 期間バーをレーン詰め表示にするか（packed/unpacked）。トップバーのセグメントトグルで切替。
   // 表示方法は3択: 'unpacked'(1行ずつ) / 'middle'(semi-packed) / 'packed'(全体を詰める)。
-  const [laneMode, setLaneMode] = useState<LaneMode>('unpacked')
+  const [laneMode, setLaneMode] = useState<LaneMode>('middle')
   // エクスプローラーの帯は単一年表なので semi-packed は packed と同じ。中間も詰めて表示する。
   const stripPacked = laneMode !== 'unpacked'
   // 開発用フラスコボタン（実験用機能の割り当て先。今は未割り当て）。
