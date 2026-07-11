@@ -650,6 +650,20 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
             <button className="who" title={t('settings.tabAccount')} onClick={openAccount}>{username}</button>
           )}
           <button className={'icon-btn' + (showSettings ? ' active' : '')} title={t('nav.settings')} onClick={openAppearance}><Settings size={18} /></button>
+          {/* 言語セグメント切替（2択）。「自分の年表／エクスプローラー」と同じ seg-toggle 形式で
+              国旗を横に並べ、選択中の言語を強調する（設定画面の言語切替と同じ settings.lang を変更）。 */}
+          <div className="seg-toggle lang-seg" role="group" aria-label={t('nav.switchLanguage')}>
+            {([['ja', 'jp.jpg', '日本語'], ['en', 'gb.jpg', 'English']] as const).map(([code, flag, name]) => (
+              <button
+                key={code}
+                className={'seg-btn' + (settings.lang === code ? ' active' : '')}
+                title={name} aria-label={name} aria-pressed={settings.lang === code}
+                onClick={() => setSettings((s) => ({ ...s, lang: code }))}
+              >
+                <img className="lang-flag-img" src={`${import.meta.env.BASE_URL}flags/${flag}`} alt={name} />
+              </button>
+            ))}
+          </div>
           {isGuest ? (
             <button className="login-btn" onClick={onRequestLogin}>{t('nav.loginRegister')}</button>
           ) : (

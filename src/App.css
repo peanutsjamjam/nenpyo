@@ -41,6 +41,12 @@
 .seg-btn:hover:not(.active):not(:disabled) { background: var(--accent-soft); color: var(--accent); }
 .seg-btn.active { background: var(--accent); color: #fff; }
 .seg-btn:disabled { opacity: 0.4; cursor: default; }
+/* 言語セグメント: 選択中の背景色は「自分の年表／エクスプローラー」と同じ（.seg-btn.active の
+   accent 塗りつぶしをそのまま使う）。国旗は色を反転できないので、非選択=薄く（opacity）で
+   選択状態を補助的に強調する。 */
+.lang-flag-img { width: 22px; height: auto; border-radius: 2px; display: block; opacity: 0.5; }
+.lang-seg .seg-btn:hover .lang-flag-img { opacity: 0.85; }
+.lang-seg .seg-btn.active .lang-flag-img { opacity: 1; }
 
 /* ---- 本体 2カラム ---- */
 .body { display: flex; flex: 1; min-height: 0; position: relative; }
