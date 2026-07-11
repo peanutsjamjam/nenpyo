@@ -33,10 +33,10 @@ export function ChangePasswordView({ onDone }: { onDone: () => void }) {
     onTouchEnd: () => reveal(false),
   })
 
-  // 両欄に1文字以上の入力があって一致しているか。枠の色付けと送信ボタンの活性に使う。
-  const bothFilled = next !== '' && next2 !== ''
-  const matches = bothFilled && next === next2
-  const matchClass = bothFilled ? (matches ? ' match' : ' mismatch') : ''
+  // いずれかの欄に入力があれば一致=緑 / 不一致=赤の枠を出す。送信は両欄が一致したときだけ。
+  const anyFilled = next !== '' || next2 !== ''
+  const matches = next !== '' && next === next2
+  const matchClass = anyFilled ? (next === next2 ? ' match' : ' mismatch') : ''
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()

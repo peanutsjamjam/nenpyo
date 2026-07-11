@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Account } from './api'
 import { AuthView } from './components/AuthView'
 import { SignupCompleteView } from './components/SignupCompleteView'
+import { ResetPasswordView } from './components/ResetPasswordView'
 import { Timeline } from './components/Timeline'
 import './App.css'
 
@@ -20,6 +21,10 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(false)
   const [signupToken, setSignupToken] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get('signup')
+  )
+  // ?reset=<token>: パスワード再設定リンク。ログイン状態に関わらず優先して開く。
+  const [resetToken, setResetToken] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('reset')
   )
 
   // セッションを確認し、無ければゲストを作る。ログアウト後にも呼んで新しいゲストへ戻す。
@@ -45,10 +50,29 @@ export default function App() {
     window.history.replaceState({}, '', u.toString())
   }
 
+  // URL から ?reset を取り除く（再設定完了・やり直し時）。
+  const clearResetToken = () => {
+    setResetToken(null)
+    const u = new URL(window.location.href)
+    u.searchParams.delete('reset')
+    window.history.replaceState({}, '', u.toString())
+  }
+
   // 本会員（ゲストでない）としてログイン済みか。
   const realUser = acct != null && !acct.guest
 
   if (loading) return <div className="splash">{t('common.loading')}</div>
+  // 再設定リンクは、ログイン状態に関わらず最優先で開く（トークンの示す
+  // アカウントのパスワードを設定し直し、そのままそのアカウントでログインする）。
+  if (resetToken) {
+    return (
+      <ResetPasswordView
+        token={resetToken}
+        onAuthed={(a) => { clearResetToken(); onAuthed(a) }}
+        onRestart={clearResetToken}
+      />
+    )
+  }
   // 確認リンクは、未ログイン時のほか「ゲストのまま」でも開く（昇格のためセッションを保つ）。
   if (signupToken && !realUser) {
     return (

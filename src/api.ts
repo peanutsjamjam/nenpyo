@@ -211,6 +211,13 @@ export const api = {
   logout: () => call<{ ok: true }>('POST', 'logout'),
   changePassword: (currentPassword: string, newPassword: string) =>
     call<{ ok: true }>('POST', 'change_password', { body: { current_password: currentPassword, new_password: newPassword } }),
+  // パスワード再設定（申請→リンク→確定の3段階）。申請は登録の有無に関わらず {ok:true}。
+  resetRequest: (email: string) =>
+    call<{ ok: true }>('POST', 'reset_request', { body: { email } }),
+  resetVerify: (token: string) =>
+    call<{ email: string }>('GET', `reset_verify&token=${encodeURIComponent(token)}`),
+  resetComplete: (token: string, password: string) =>
+    call<Account>('POST', 'reset_complete', { body: { token, password } }),
   deleteAccount: () => call<{ ok: true }>('DELETE', 'account'),
   listEvents: () => call<EventItem[]>('GET', 'events'),
   createEvent: (e: EventInput) => call<EventItem>('POST', 'event', { body: e }),

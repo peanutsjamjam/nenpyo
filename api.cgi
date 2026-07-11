@@ -12,14 +12,15 @@ use File::Basename qw(dirname);
 #
 # 配信:  Apache UserDir 配下、suexec で sugawara として実行される。
 #        そのため PostgreSQL へは peer 認証（パスワード不要）で接続できる。
-# DB:    nenpyo（users / sessions / signup_tokens / nenpyo / events / color_scheme / colors）。
+# DB:    nenpyo（users / sessions / signup_tokens / reset_tokens / nenpyo / events / color_scheme / colors）。
 #        定義は ddl/*.sql 参照。
 # 認証:  ログイン時にランダムトークンを sessions に保存し、HttpOnly Cookie
 #        (nenpyo_sid) で受け渡す。パスワードは PBKDF2-HMAC-SHA256 で保存。
 #
 # エンドポイント（?action= と REQUEST_METHOD で分岐）:
-#   POST   ?action=signup_request  {email}         -> 確認リンクをメール送信（まだ登録しない）
-#                                                     既に登録済みなら 409 {error:'duplicate', fields:['email']}
+#   POST   ?action=signup_request  {email}         -> 確認リンクをメール送信（まだ登録しない）。
+#                                                     既に登録済みでも {ok:true}（存在を秘匿し、
+#                                                     案内メールを送る）
 #   GET    ?action=signup_verify&token=<t>         -> {email}（リンクの有効性確認）
 #   POST   ?action=signup_complete {token,username,password}
 #                                                  -> 登録してログイン状態に
@@ -30,6 +31,10 @@ use File::Basename qw(dirname);
 #   POST   ?action=logout                          -> ログアウト
 #   POST   ?action=change_password {current_password,new_password}
 #                                                  -> パスワード変更
+#   POST   ?action=reset_request  {email}          -> 登録済みなら再設定リンクをメール送信。
+#                                                     未登録でも {ok:true} を返す（存在を秘匿）
+#   GET    ?action=reset_verify&token=<t>          -> {email}（リンクの有効性確認）
+#   POST   ?action=reset_complete {token,password} -> 新パスワードを設定してログイン状態に
 #   DELETE ?action=account                         -> アカウント削除（関連データを全消去）
 #   GET    ?action=env                             -> {env}（実行環境名。env.pl 由来）
 #   GET    ?action=dev_users                       -> 全ユーザー一覧（開発環境のみ。本番は404）
@@ -70,6 +75,7 @@ my $SESSION_DAYS = 30;
 my $GUEST_DAYS   = 3;                        # ゲスト（一時ユーザー）の有効期間
 my $PBKDF2_ITER  = 120000;
 my $SIGNUP_TOKEN_HOURS = 1;                 # サインアップ用リンクの有効期限
+my $RESET_TOKEN_HOURS  = 1;                 # パスワード再設定用リンクの有効期限
 my $MAIL_FROM    = 'nenpyo@peanutsjamjam.jp'; # 確認メールの差出人
 
 # 実行環境名。api.cgi と同じディレクトリの env.pl（git 管理外。dev/本番で内容が異なる）を
@@ -213,6 +219,13 @@ sub purge_expired_signup_tokens {
         or warn "purge_expired_signup_tokens failed: $@\n";
 }
 
+# 期限切れのパスワード再設定用トークンを掃除する（ついで掃除）。
+sub purge_expired_reset_tokens {
+    my ($dbh) = @_;
+    eval { $dbh->do('DELETE FROM reset_tokens WHERE expires_at < now()'); 1 }
+        or warn "purge_expired_reset_tokens failed: $@\n";
+}
+
 # 期限切れゲスト（一時ユーザー）を掃除する（ついで掃除）。users を消すと
 # その年表・イベント・セッションは ON DELETE CASCADE で道連れに削除される。
 sub purge_expired_guests {
@@ -272,6 +285,77 @@ sub send_signup_email {
         1;
     };
     warn "send_signup_email failed: $@\n" unless $ok;
+    return $ok ? 1 : 0;
+}
+
+# パスワード再設定リンクのメールを送る。宛先 $to は登録済みメール（書式検証済み）。
+# 送信失敗時は 0 を返す（呼び出し側で扱う）。
+sub send_reset_email {
+    my ($to, $url) = @_;
+    # 件名・本文とも、同じ内容を英語→日本語の順で併記する。
+    my $subject = mime_word('Reset your nenpyo password / 【nenpyo】パスワード再設定のお知らせ');
+    my $body = "We received a request to reset your nenpyo password.\n"
+             . "Open the link below to set a new password.\n"
+             . "(This link is valid for ${RESET_TOKEN_HOURS} hour(s) only.)\n\n"
+             . "$url\n\n"
+             . "If you did not request this, please ignore this email; your password will not change.\n"
+             . "\n----------------------------------------\n\n"
+             . "nenpyo のパスワード再設定のリクエストを受け付けました。\n"
+             . "下記のリンクを開いて、新しいパスワードを設定してください。\n"
+             . "（このリンクは ${RESET_TOKEN_HOURS} 時間のみ有効です）\n\n"
+             . "$url\n\n"
+             . "心当たりがない場合は、このメールを破棄してください（パスワードは変更されません）。\n";
+    utf8::encode($body) if utf8::is_utf8($body);
+    my $ok = eval {
+        open(my $mh, '|-', '/usr/sbin/sendmail', '-t', '-i') or die "sendmail: $!";
+        print $mh "From: nenpyo <$MAIL_FROM>\r\n";
+        print $mh "To: $to\r\n";
+        print $mh "Subject: $subject\r\n";
+        print $mh "MIME-Version: 1.0\r\n";
+        print $mh "Content-Type: text/plain; charset=\"UTF-8\"\r\n";
+        print $mh "Content-Transfer-Encoding: base64\r\n";
+        print $mh "\r\n";
+        print $mh MIME::Base64::encode_base64($body);
+        close($mh) or die "sendmail close: $!";
+        1;
+    };
+    warn "send_reset_email failed: $@\n" unless $ok;
+    return $ok ? 1 : 0;
+}
+
+# 既に登録済みのメールにサインアップ申請が来たときの案内メール。存在の有無を秘匿するため
+# API/UI の応答は未登録時と同じ（{ok}→「送信しました」）にし、リンクの代わりにこの案内を送る。
+# こうすれば、そのメールの本当の持ち主だけが「既にアカウントがある」ことを知れる。
+sub send_signup_exists_email {
+    my ($to, $url) = @_;
+    my $subject = mime_word('About your nenpyo account / 【nenpyo】アカウントについてのお知らせ');
+    my $body = "Someone (perhaps you) tried to sign up for nenpyo with this email address,\n"
+             . "but an account already exists for it.\n"
+             . "You can simply log in below. If you forgot your password, use \"Forgot your password?\" on the login screen.\n\n"
+             . "$url\n\n"
+             . "If this wasn't you, no action is needed; your account is unaffected.\n"
+             . "\n----------------------------------------\n\n"
+             . "このメールアドレスで nenpyo への新規登録が試みられましたが、\n"
+             . "すでにアカウントが存在します。\n"
+             . "下記からそのままログインできます。パスワードをお忘れの場合は、ログイン画面の\n"
+             . "「パスワードをお忘れですか？」からパスワードを再設定してください。\n\n"
+             . "$url\n\n"
+             . "心当たりがない場合は、対応は不要です（アカウントに影響はありません）。\n";
+    utf8::encode($body) if utf8::is_utf8($body);
+    my $ok = eval {
+        open(my $mh, '|-', '/usr/sbin/sendmail', '-t', '-i') or die "sendmail: $!";
+        print $mh "From: nenpyo <$MAIL_FROM>\r\n";
+        print $mh "To: $to\r\n";
+        print $mh "Subject: $subject\r\n";
+        print $mh "MIME-Version: 1.0\r\n";
+        print $mh "Content-Type: text/plain; charset=\"UTF-8\"\r\n";
+        print $mh "Content-Transfer-Encoding: base64\r\n";
+        print $mh "\r\n";
+        print $mh MIME::Base64::encode_base64($body);
+        close($mh) or die "sendmail close: $!";
+        1;
+    };
+    warn "send_signup_exists_email failed: $@\n" unless $ok;
     return $ok ? 1 : 0;
 }
 
@@ -465,9 +549,13 @@ eval {
         $email =~ s/^\s+|\s+$//g;
         fail('email_required') if $email eq '';
         fail('email_invalid')  if length($email) > 254 || $email !~ /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-        # 既に登録済みのメールなら、リンクは送らず「使用済み」を返す。
-        respond({ error => 'duplicate', fields => ['email'] }, '409 Conflict')
-            if $dbh->selectrow_array('SELECT 1 FROM users WHERE lower(email) = lower(?)', undef, $email);
+        # 既に登録済みのメールでも、存在の有無を秘匿するため未登録時と同じ {ok} を返す
+        # （メールアドレスの探り出しを防ぐ）。その場合は登録リンクではなく「既にアカウントが
+        # あります」の案内メールを送る（リンクを送っても signup_complete で弾かれるだけ）。
+        if ($dbh->selectrow_array('SELECT 1 FROM users WHERE lower(email) = lower(?)', undef, $email)) {
+            send_signup_exists_email($email, app_base_url());
+            respond({ ok => JSON::PP::true });
+        }
 
         # 同じメール宛の古いトークンは破棄し、新しいトークンを発行する。
         $dbh->do('DELETE FROM signup_tokens WHERE lower(email) = lower(?)', undef, $email);
@@ -608,6 +696,80 @@ eval {
             undef, $hash, $salt, $PBKDF2_ITER, $u->{id}
         );
         respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'reset_request' && $method eq 'POST') {
+        # パスワード再設定の申請: メールを受け取り、そのメールで登録済みの本会員が
+        # いれば再設定リンクを送る。存在の有無は秘匿するため、未登録でも {ok:true} を返す。
+        my $body = read_body_json();
+        my $email = defined $body->{email} ? $body->{email} : '';
+        $email =~ s/^\s+|\s+$//g;
+        fail('email_required') if $email eq '';
+        # 登録済みの本会員（ゲストは email=NULL なので対象外）を探す。
+        my $u = $dbh->selectrow_hashref(
+            'SELECT id, email FROM users WHERE lower(email) = lower(?) AND NOT is_guest',
+            undef, $email
+        );
+        if ($u) {
+            # 同じユーザー宛の古いトークンは破棄し、新しいトークンを発行する。
+            $dbh->do('DELETE FROM reset_tokens WHERE user_id = ?', undef, $u->{id});
+            my $token = random_hex(32);
+            $dbh->do(
+                "INSERT INTO reset_tokens (token, user_id, expires_at)
+                 VALUES (?,?, now() + interval '$RESET_TOKEN_HOURS hours')",
+                undef, $token, $u->{id}
+            );
+            my $url = app_base_url() . "?reset=$token";
+            send_reset_email($u->{email}, $url);   # 失敗しても存在秘匿のため ok を返す（warn 記録）
+        }
+        purge_expired_reset_tokens($dbh);
+        respond({ ok => JSON::PP::true });
+    }
+    elsif ($action eq 'reset_verify' && $method eq 'GET') {
+        # リンクのトークンを検証し、対応するメールを返す（再設定画面の表示用）。
+        my $token = query_param('token') || '';
+        my $row = $dbh->selectrow_hashref(
+            'SELECT u.email FROM reset_tokens r JOIN users u ON u.id = r.user_id
+              WHERE r.token = ? AND r.expires_at > now()',
+            undef, $token
+        );
+        fail('reset_token_invalid', '400 Bad Request') unless $row;
+        respond({ email => $row->{email} });
+    }
+    elsif ($action eq 'reset_complete' && $method eq 'POST') {
+        # 再設定の送信: トークン＋新パスワードでパスワードを作り直し、ログイン状態にする。
+        my $body = read_body_json();
+        my $token    = defined $body->{token}    ? $body->{token}    : '';
+        my $password = defined $body->{password} ? $body->{password} : '';
+
+        my $row = $dbh->selectrow_hashref(
+            'SELECT u.id, u.username, u.email FROM reset_tokens r JOIN users u ON u.id = r.user_id
+              WHERE r.token = ? AND r.expires_at > now()',
+            undef, $token
+        );
+        fail('reset_token_invalid', '400 Bad Request') unless $row;
+
+        fail('password_too_short') if length($password) < 4;
+        fail('password_too_long')  if length($password) > 128;
+
+        my $salt = random_hex(16);
+        my $hash = pbkdf2($password, $salt, $PBKDF2_ITER);
+        $dbh->do(
+            'UPDATE users SET password_hash = ?, salt = ?, iterations = ? WHERE id = ?',
+            undef, $hash, $salt, $PBKDF2_ITER, $row->{id}
+        );
+        # 使い終わったトークンを削除し、既存セッションも全て無効化してから作り直す
+        # （盗まれていた可能性のある古いセッションを切るため）。
+        $dbh->do('DELETE FROM reset_tokens WHERE user_id = ?', undef, $row->{id});
+        $dbh->do('DELETE FROM sessions WHERE user_id = ?', undef, $row->{id});
+        my $stoken = random_hex(32);
+        $dbh->do(
+            "INSERT INTO sessions (token, user_id, expires_at)
+             VALUES (?,?, now() + interval '$SESSION_DAYS days')",
+            undef, $stoken, $row->{id}
+        );
+        purge_expired_sessions($dbh);
+        set_session_cookie($stoken);
+        respond({ username => $row->{username}, email => $row->{email}, guest => JSON::PP::false });
     }
     elsif ($action eq 'account' && $method eq 'DELETE') {
         my $u = require_user($dbh);

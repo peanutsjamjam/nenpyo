@@ -9,17 +9,19 @@ import { api, ApiError, type Account } from '../api'
 // （外側の背景クリックで閉じられるよう、カード内クリックの伝播は止める）。
 export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (acct: Account) => void; onCancel: () => void; overlay?: boolean }) {
   const { t } = useTranslation()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  // login / register（サインアップ申請）/ forgot（パスワード再設定申請）。
+  // forgot はログイン画面の「パスワードをお忘れですか？」リンクから入る。
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   // メール欄のエラー（重複や形式不正）。入力欄を赤く囲って下に表示する。
   const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({})
   const [busy, setBusy] = useState(false)
-  const [sent, setSent] = useState(false) // サインアップ確認メールを送信済みか
+  const [sent, setSent] = useState(false) // サインアップ確認 / 再設定リンクのメールを送信済みか
   const emailRef = useRef<HTMLInputElement>(null)
 
-  const switchMode = (m: 'login' | 'register') => {
+  const switchMode = (m: 'login' | 'register' | 'forgot') => {
     setMode(m)
     setError('')
     setFieldErrors({})
@@ -35,17 +37,19 @@ export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (a
       if (mode === 'login') {
         const u = await api.login(email, password)
         onAuthed(u)
+      } else if (mode === 'forgot') {
+        // 登録の有無に関わらず {ok} が返る（存在秘匿）。送信済み表示に切り替える。
+        await api.resetRequest(email)
+        setSent(true)
       } else {
         await api.signupRequest(email)
         setSent(true)
       }
     } catch (err) {
-      // メールの重複・形式エラーは該当欄に表示する。
-      if (err instanceof ApiError) {
-        const fe: { email?: string } = {}
-        if (err.code === 'duplicate' && err.fields?.includes('email')) fe.email = t('errors.email_taken')
-        else if (err.code === 'email_required' || err.code === 'email_invalid') fe.email = err.message
-        if (fe.email) { setFieldErrors(fe); return }
+      // メールの形式エラーは該当欄に表示する（重複は秘匿のためサーバーが {ok} を返すので出ない）。
+      if (err instanceof ApiError && (err.code === 'email_required' || err.code === 'email_invalid')) {
+        setFieldErrors({ email: err.message })
+        return
       }
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -58,10 +62,15 @@ export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (a
         <div className="auth-logo"><ScrollText size={28} /> <span>nenpyo</span></div>
         <p className="auth-sub">{t('auth.tagline')}</p>
 
-        <div className="auth-tabs">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>{t('auth.login')}</button>
-          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>{t('auth.register')}</button>
-        </div>
+        {/* タブは login/register のときだけ。forgot（再設定申請）は見出しに置き換える。 */}
+        {mode === 'forgot' ? (
+          <p className="auth-sub" style={{ fontWeight: 600 }}>{t('auth.forgotTitle')}</p>
+        ) : (
+          <div className="auth-tabs">
+            <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>{t('auth.login')}</button>
+            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>{t('auth.register')}</button>
+          </div>
+        )}
 
         {mode === 'login' ? (<>
           <label>{t('auth.email')}
@@ -76,7 +85,27 @@ export function AuthView({ onAuthed, onCancel, overlay = false }: { onAuthed: (a
           <button type="submit" className="auth-submit" disabled={busy}>
             {busy ? '…' : t('auth.submitLogin')}
           </button>
-        </>) : sent ? (<>
+          {/* 「パスワードを忘れた人」向けのリンク。押すとメール入力だけの再設定申請へ。 */}
+          <button type="button" className="auth-link" onClick={() => switchMode('forgot')}>{t('auth.forgot')}</button>
+        </>) : mode === 'forgot' ? (sent ? (<>
+          <div className="auth-success" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <MailCheck size={32} />
+            <span>{t('auth.forgotSentTitle')}</span>
+          </div>
+          <p className="auth-sub" style={{ margin: 0 }}>{t('auth.forgotSentBody')}</p>
+          <button type="button" className="auth-back" onClick={() => switchMode('login')}>{t('auth.backToLogin')}</button>
+        </>) : (<>
+          <label>{t('auth.email')}
+            <input type="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus />
+          </label>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <button type="submit" className="auth-submit" disabled={busy}>
+            {busy ? '…' : t('auth.forgotSubmit')}
+          </button>
+          <button type="button" className="auth-back" onClick={() => switchMode('login')}>{t('auth.backToLogin')}</button>
+        </>)) : sent ? (<>
           <div className="auth-success" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <MailCheck size={32} />
             <span>{t('auth.sentTitle')}</span>
