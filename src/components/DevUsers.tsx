@@ -99,6 +99,7 @@ export function DevUsers({ onClose }: { onClose: () => void }) {
                 <th className="num">年表数</th>
                 <th className="num">イベント数</th>
                 <th>作成日時</th>
+                <th>アクセス元IP</th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +117,7 @@ export function DevUsers({ onClose }: { onClose: () => void }) {
                   <td className="num">{u.nenpyo_count}</td>
                   <td className="num">{u.event_count}</td>
                   <td>{u.created_at}</td>
+                  <td>{u.last_ip ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

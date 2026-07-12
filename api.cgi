@@ -12,7 +12,7 @@ use File::Basename qw(dirname);
 #
 # 配信:  Apache UserDir 配下、suexec で sugawara として実行される。
 #        そのため PostgreSQL へは peer 認証（パスワード不要）で接続できる。
-# DB:    nenpyo（users / sessions / signup_tokens / reset_tokens / nenpyo / events / color_scheme / colors）。
+# DB:    nenpyo（users / sessions / signup_tokens / reset_tokens / access_log / nenpyo / events / color_scheme / colors）。
 #        定義は ddl/*.sql 参照。
 # 認証:  ログイン時にランダムトークンを sessions に保存し、HttpOnly Cookie
 #        (nenpyo_sid) で受け渡す。パスワードは PBKDF2-HMAC-SHA256 で保存。
@@ -232,6 +232,17 @@ sub purge_expired_guests {
     my ($dbh) = @_;
     eval { $dbh->do('DELETE FROM users WHERE is_guest AND expires_at < now()'); 1 }
         or warn "purge_expired_guests failed: $@\n";
+}
+
+# アクセスログ: どの IP からのアクセスか（ログイン中ならその user_id も）を1行記録する。
+# クライアント IP は Apache が付ける REMOTE_ADDR を使う。記録に失敗してもリクエスト自体は
+# 止めない（warn のみ）。$user_id は未ログインなら undef（NULL）。
+sub log_access {
+    my ($dbh, $user_id) = @_;
+    my $ip = $ENV{REMOTE_ADDR};
+    return unless defined $ip && $ip ne '';
+    eval { $dbh->do('INSERT INTO access_log (user_id, ip_addr) VALUES (?, ?)', undef, $user_id, $ip); 1 }
+        or warn "log_access failed: $@\n";
 }
 
 # ---- メール（サインアップ確認リンク） --------------------------------------
@@ -542,6 +553,9 @@ eval {
 
     my $dbh = db();
 
+    # アクセスログ記録: リクエストごとに、送信元 IP と（ログイン中なら）その user_id を残す。
+    log_access($dbh, do { my $lu = current_user($dbh); $lu ? $lu->{id} : undef });
+
     if ($action eq 'signup_request' && $method eq 'POST') {
         # サインアップ申請: メールを受け取り、確認リンクを送る（まだアカウントは作らない）。
         my $body = read_body_json();
@@ -786,7 +800,9 @@ eval {
         my $rows = $dbh->selectall_arrayref(
             'SELECT u.id, u.username, u.email, u.is_guest, u.expires_at, u.created_at,
                     (SELECT count(*) FROM nenpyo n WHERE n.user_id = u.id AND n.virtual_nenpyo_id IS NULL) AS nenpyo_count,
-                    (SELECT count(*) FROM events e WHERE e.user_id = u.id) AS event_count
+                    (SELECT count(*) FROM events e WHERE e.user_id = u.id) AS event_count,
+                    (SELECT a.ip_addr FROM access_log a WHERE a.user_id = u.id
+                      ORDER BY a.accessed_at DESC, a.id DESC LIMIT 1) AS last_ip
                FROM users u ORDER BY u.id',
             { Slice => {} }
         );
@@ -800,6 +816,7 @@ eval {
                 created_at   => $_->{created_at},
                 nenpyo_count => 0 + $_->{nenpyo_count},
                 event_count  => 0 + $_->{event_count},
+                last_ip      => $_->{last_ip},
             }
         } @$rows;
         respond(\@out);

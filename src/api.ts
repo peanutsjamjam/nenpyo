@@ -21,6 +21,7 @@ export type DevUser = {
   created_at: string
   nenpyo_count: number
   event_count: number
+  last_ip: string | null      // アクセスログ中で最新の送信元 IP。記録が無ければ null
 }
 
 // 開発用: 指定ユーザーの年表とイベント（dev_user_timeline が返す）。
