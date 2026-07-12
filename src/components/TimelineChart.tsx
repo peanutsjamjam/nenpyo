@@ -210,14 +210,25 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
   // キー操作: メイン領域をクリック（フォーカス）した後、矢印キーまたは hjkl でスクロールする。
   //   ← / h … 左へパン、→ / l … 右へパン（ホイールのパンと同じ量。centerYear を動かす）
   //   ↑ / k … 上へ、↓ / j … 下へ縦スクロール（1行ぶん。native の scrollTop を動かす）
+  //   Shift+K（大文字 K）… 拡大、Shift+J（大文字 J）… 縮小。中心は画面の左右中央
+  //   （＝centerYear を保ったまま yearsVisible だけを変える。量はホイール1ノッチ＝zoomFactor と同じ）。
   // ブラウザ既定のスクロール（フォーカスした要素の上下移動やページスクロール）は抑止する。
   const onChartKeyDown = (e: React.KeyboardEvent) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return
+    const { centerYear: cy, yearsVisible: yv } = viewRef.current
+    // Shift+J/K の拡大縮小。画面中央を固定して yearsVisible のみ変える。
+    if (e.key === 'J' || e.key === 'K') {
+      e.preventDefault()
+      const factor = e.key === 'J' ? zoomFactor : 1 / zoomFactor   // J=縮小(表示年数↑) / K=拡大(↓)
+      const newYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, yv * factor))
+      viewRef.current = { centerYear: cy, yearsVisible: newYV }
+      setYearsVisible(() => newYV)
+      return
+    }
     // 矢印キーと vim 風 hjkl を同じ方向にまとめる。
     const dir = ({ ArrowLeft: 'left', h: 'left', ArrowRight: 'right', l: 'right',
       ArrowUp: 'up', k: 'up', ArrowDown: 'down', j: 'down' } as const)[e.key]
     if (!dir) return
-    const { centerYear: cy, yearsVisible: yv } = viewRef.current
     if (dir === 'left' || dir === 'right') {
       e.preventDefault()
       const nc = cy + (dir === 'right' ? 1 : -1) * yv / 10
