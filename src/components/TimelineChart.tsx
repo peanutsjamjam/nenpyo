@@ -207,23 +207,27 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
     window.addEventListener('mouseup', onUp)
   }
 
-  // カーソルキー操作: メイン領域をクリック（フォーカス）した後、矢印キーでスクロールする。
-  //   ←→ … 左右にパン（ホイールのパンと同じ量。centerYear を動かす）
-  //   ↑↓ … 縦スクロール（1行ぶん。native の scrollTop を動かす）
+  // キー操作: メイン領域をクリック（フォーカス）した後、矢印キーまたは hjkl でスクロールする。
+  //   ← / h … 左へパン、→ / l … 右へパン（ホイールのパンと同じ量。centerYear を動かす）
+  //   ↑ / k … 上へ、↓ / j … 下へ縦スクロール（1行ぶん。native の scrollTop を動かす）
   // ブラウザ既定のスクロール（フォーカスした要素の上下移動やページスクロール）は抑止する。
   const onChartKeyDown = (e: React.KeyboardEvent) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return
+    // 矢印キーと vim 風 hjkl を同じ方向にまとめる。
+    const dir = ({ ArrowLeft: 'left', h: 'left', ArrowRight: 'right', l: 'right',
+      ArrowUp: 'up', k: 'up', ArrowDown: 'down', j: 'down' } as const)[e.key]
+    if (!dir) return
     const { centerYear: cy, yearsVisible: yv } = viewRef.current
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (dir === 'left' || dir === 'right') {
       e.preventDefault()
-      const nc = cy + (e.key === 'ArrowRight' ? 1 : -1) * yv / 10
+      const nc = cy + (dir === 'right' ? 1 : -1) * yv / 10
       viewRef.current = { centerYear: nc, yearsVisible: yv }
       setCenterYear(() => nc)
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    } else {
       const el = scrollRef.current
       if (!el) return
       e.preventDefault()
-      el.scrollTop += (e.key === 'ArrowDown' ? 1 : -1) * rowHeight
+      el.scrollTop += (dir === 'down' ? 1 : -1) * rowHeight
     }
   }
 
