@@ -151,6 +151,8 @@
 .strip { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; background: var(--panel); cursor: pointer; }
 /* 選択中の年表（帯）はキーカラー（アクセント）で囲む */
 .strip.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* キー操作のためフォーカス可能(tabIndex)だが、選択中は既に accent 枠が出るので枠は出さない。 */
+.strip:focus { outline: none; }
 .strip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 /* 左側に、フォローボタン（上）と年表名＋作成者（下）を縦に積む */
 .strip-head-main { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }

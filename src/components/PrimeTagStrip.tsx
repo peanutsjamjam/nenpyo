@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState, useRef, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ArrowLeft, CheckSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatRangeAD, type ExploreTag, type ExploreEvent } from '../api'
@@ -150,8 +150,47 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
     window.addEventListener('mouseup', onUp)
   }
 
+  // キー操作: 帯をクリック（フォーカス）した後、メイン画面と同じキーで操作する。
+  //   ← / h … 左パン、→ / l … 右パン、↑ / k・↓ / j … 帯内の縦スクロール（1行ぶん）。
+  //   Shift+K … 拡大、Shift+J … 縮小（中心はこの帯の左右中央＝center 固定で yearsVisible のみ変更）。
+  // パン・ズームは選択中の帯だけが対象なので、未選択なら先にこの帯を選択する。
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return
+    const { center: cy, yearsVisible: yv } = viewRef.current
+    if (e.key === 'J' || e.key === 'K') {
+      e.preventDefault()
+      if (!selected) onSelectStrip()
+      const factor = e.key === 'J' ? zoomFactor : 1 / zoomFactor   // J=縮小 / K=拡大
+      const newYV = Math.min(MAX_YEARS, Math.max(MIN_YEARS, yv * factor))
+      setView({ center: cy, yearsVisible: newYV })
+      return
+    }
+    const dir = ({ ArrowLeft: 'left', h: 'left', ArrowRight: 'right', l: 'right',
+      ArrowUp: 'up', k: 'up', ArrowDown: 'down', j: 'down' } as const)[e.key]
+    if (!dir) return
+    if (dir === 'left' || dir === 'right') {
+      e.preventDefault()
+      if (!selected) onSelectStrip()
+      setView({ center: cy + (dir === 'right' ? 1 : -1) * yv / 10, yearsVisible: yv })
+    } else {
+      const el = bodyRef.current
+      if (!el) return
+      e.preventDefault()
+      el.scrollTop += (dir === 'down' ? 1 : -1) * rowHeight
+    }
+  }
+
   return (
-    <div className={'strip' + (selected ? ' selected' : '')} onClick={(e) => { e.stopPropagation(); onSelectStrip() }}>
+    <div
+      className={'strip' + (selected ? ' selected' : '')}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      // フォーカスがこの帯（または内部の取り込みボタン等）に入ったら選択する。
+      // Tab でフォーカスが移ると青い枠（選択）も一緒に移動する。onFocus は focusin
+      // 由来でバブリングするので、子要素へのフォーカスでも発火する。
+      onFocus={() => { if (!selected) onSelectStrip() }}
+      onClick={(e) => { e.stopPropagation(); onSelectStrip() }}
+    >
       <div className="strip-head">
         <div className="strip-head-main">
           {showFollow && (
