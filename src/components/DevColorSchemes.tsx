@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, ChevronUp, ChevronDown, CopyPlus, Plus } from 'lucide-react'
+import { X, ChevronUp, ChevronDown, CopyPlus, Trash2, Plus } from 'lucide-react'
 import { api, type ColorScheme } from '../api'
 import { textColorFor } from '../lib/format'
 
@@ -14,7 +14,7 @@ import { textColorFor } from '../lib/format'
 const COLOR_ROLES = ['bg1', 'bg2', 'key1', 'key2']
 const colorLabel = (ci: number) => COLOR_ROLES[ci] ?? `c${ci + 1}`
 
-export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSchemeCreated, onClose }: {
+export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSchemeCreated, onSchemeDeleted, onClose }: {
   // 現在選択中の配色 id（設定の schemeId）。null なら未選択。
   schemeId: number | null
   // ラジオで配色を切り替えたとき、直ちにその配色を適用する。
@@ -23,6 +23,8 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
   onColorChanged: (schemeId: number, colorId: number, color: string) => void
   // 配色を複製して新規作成したとき、親の配色一覧にも追加する（設定のテーマ選択に出す）。
   onSchemeCreated: (scheme: ColorScheme) => void
+  // 配色を削除したとき、親の配色一覧からも取り除く（選択中なら親側で解除される）。
+  onSchemeDeleted: (schemeId: number) => void
   onClose: () => void
 }) {
   const [schemes, setSchemes] = useState<ColorScheme[] | null>(null)
@@ -83,6 +85,20 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
       savedNames.current.set(created.id, created.name)
       setSchemes((prev) => (prev ? [...prev, created] : [created]))
       onSchemeCreated(created)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // 配色を削除。確認のうえDBから消し、一覧からも取り除く（親にも通知）。
+  const deleteScheme = async (s: ColorScheme) => {
+    if (!window.confirm(`配色「${s.name}」を削除しますか？（色もまとめて削除されます）`)) return
+    setError('')
+    try {
+      await api.devDeleteColorScheme(s.id)
+      savedNames.current.delete(s.id)
+      setSchemes((prev) => prev && prev.filter((x) => x.id !== s.id))
+      onSchemeDeleted(s.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -152,6 +168,7 @@ export function DevColorSchemes({ schemeId, onSelectScheme, onColorChanged, onSc
                 <button className="settings-close" onClick={() => moveScheme(s.id, 1)} disabled={i >= schemes.length - 1} title="下へ" aria-label="下へ"><ChevronDown size={18} /></button>
               </span>
               <button className="settings-close" onClick={() => copyScheme(s.id)} title="この配色を複製して新規作成" aria-label="複製して新規作成"><CopyPlus size={18} /></button>
+              <button className="settings-close" onClick={() => deleteScheme(s)} title="この配色を削除" aria-label="削除"><Trash2 size={18} /></button>
               <span className="dev-scheme-sep">：</span>
               <span className="dev-scheme-colors">
                 {s.colors.map((c, ci) => (

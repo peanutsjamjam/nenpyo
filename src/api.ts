@@ -185,6 +185,9 @@ export const api = {
   // 開発用: 配色名を更新（開発環境のみ）。
   devUpdateColorSchemeName: (id: number, name: string) =>
     call<{ id: number; name: string }>('PUT', 'dev_color_scheme', { id, body: { name } }),
+  // 開発用: 配色を削除（色も CASCADE 削除。開発環境のみ）。
+  devDeleteColorScheme: (id: number) =>
+    call<{ ok: true }>('DELETE', 'dev_color_scheme', { id }),
   // 開発用: 配色内の1色を更新（開発環境のみ）。
   devUpdateColor: (id: number, color: string) =>
     call<{ id: number; color: string }>('PUT', 'dev_color', { id, body: { color } }),

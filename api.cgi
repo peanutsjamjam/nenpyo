@@ -41,6 +41,7 @@ use File::Basename qw(dirname);
 #   GET    ?action=dev_user_timeline&id=<uid>      -> 指定ユーザーの年表+イベント（開発環境のみ）
 #   GET    ?action=color_schemes                   -> 配色パターン一覧+色（要ログイン）
 #   PUT    ?action=dev_color_scheme&id=<id>        -> 配色名を更新（開発環境のみ）
+#   DELETE ?action=dev_color_scheme&id=<id>        -> 配色を削除（色も CASCADE 削除。開発環境のみ）
 #   PUT    ?action=dev_color&id=<id>               -> 配色内の1色を更新（開発環境のみ）
 #   POST   ?action=dev_color_add&id=<scheme_id>    -> 配色に色を1つ追加（末尾。開発環境のみ）
 #   POST   ?action=dev_color_schemes_reorder {ids} -> 配色の並び順を配列順に更新（開発環境のみ）
@@ -901,6 +902,16 @@ eval {
         my $n = $dbh->do('UPDATE color_scheme SET name=? WHERE id=?', undef, $name, $id);
         fail('not_found', '404 Not Found') unless $n && $n != 0;
         respond({ id => 0 + $id, name => $name });
+    }
+    elsif ($action eq 'dev_color_scheme' && $method eq 'DELETE') {
+        # 開発用: 配色を削除。所属する色は colors の ON DELETE CASCADE で道連れに消える。開発環境のみ。
+        fail('not_found', '404 Not Found') unless $NENPYO_ENV eq 'development';
+        require_user($dbh);
+        my $id = query_param('id');
+        fail('invalid_id') unless defined $id && $id =~ /^\d+$/;
+        my $n = $dbh->do('DELETE FROM color_scheme WHERE id=?', undef, $id);
+        fail('not_found', '404 Not Found') unless $n && $n != 0;
+        respond({ ok => JSON::PP::true });
     }
     elsif ($action eq 'dev_color' && $method eq 'PUT') {
         # 開発用: 配色内の1色を更新。開発環境のみ。

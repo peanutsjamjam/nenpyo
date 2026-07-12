@@ -196,9 +196,10 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
     //   2色目 = ボタンエリアの背景 --panel（各種ボタン・入力欄の背景 --input-bg も同色）,
     //   3色目 = キーカラー,
     //   4色目 = 見出しの文字色（--heading。「年表」「設定」「テーマ」等）。
-    //   未選択・色不足なら上書きを外して data-theme の既定パレットに戻す。
+    //   色不足なら上書きを外して data-theme の既定パレットに戻す。
+    //   未選択（schemeId=null）や、存在しない id のときは一覧の先頭（表示順で一番上）を使う。
     const root = document.documentElement.style
-    const scheme = settings.schemeId != null ? colorSchemes.find((s) => s.id === settings.schemeId) : undefined
+    const scheme = colorSchemes.find((s) => s.id === settings.schemeId) ?? colorSchemes[0]
     const cols = scheme?.colors ?? []
     const setOrClear = (name: string, val: string | undefined) => {
       if (val) root.setProperty(name, val); else root.removeProperty(name)
@@ -784,6 +785,11 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
                   s.id === sid ? { ...s, colors: s.colors.map((c) => (c.id === colorId ? { ...c, color } : c)) } : s
                 )))}
                 onSchemeCreated={(sc) => setColorSchemes((prev) => [...prev, sc])}
+                onSchemeDeleted={(id) => {
+                  setColorSchemes((prev) => prev.filter((s) => s.id !== id))
+                  // 削除した配色を使っていたら選択を解除（既定テーマに戻す）。
+                  setSettings((s) => (s.schemeId === id ? { ...s, schemeId: null } : s))
+                }}
                 onClose={() => setShowDevSchemes(false)}
               />
             ) : showExplorer ? (
@@ -922,7 +928,8 @@ export function Timeline({ username, email, isGuest, onLogout, onRequestLogin }:
             const onColorChange = (color: string) => { if (isAdd) setNewTagColor(color); else pickTagColor(tl!, color) }
             const onNameChange = (v: string) => { if (isAdd) setNewTagName(v); else setEditTagName(v) }
             // 現在使用中の配色の 5色目以降（c5, c6…）。あればパレットの横に並べ、クリックで即その色に設定。
-            const scheme = colorSchemes.find((sc) => sc.id === settings.schemeId)
+            // 未選択のときは適用中と同じく一覧の先頭を使う。
+            const scheme = colorSchemes.find((sc) => sc.id === settings.schemeId) ?? colorSchemes[0]
             const paletteExtras = (scheme?.colors ?? []).slice(4)
             return (
               <div className="panel-overlay">

@@ -73,19 +73,16 @@ export function SettingsPanel({ settings, setSettings, colorSchemes, onClose, us
         <div className="scheme-select-row">
           <select
             className="scheme-select"
-            value={settings.schemeId ?? ''}
-            onChange={(e) => {
-              const v = e.target.value
-              setSettings((s) => ({ ...s, schemeId: v === '' ? null : Number(v) }))
-            }}
+            // 未選択（null）のときは一覧の先頭（表示順で一番上）を選択状態として見せる。
+            value={settings.schemeId ?? colorSchemes[0]?.id ?? ''}
+            onChange={(e) => setSettings((s) => ({ ...s, schemeId: Number(e.target.value) }))}
           >
-            <option value="">{t('settings.schemeNone')}</option>
             {colorSchemes.map((sc) => (
               <option key={sc.id} value={sc.id}>{sc.name}</option>
             ))}
           </select>
           {(() => {
-            const sc = colorSchemes.find((x) => x.id === settings.schemeId)
+            const sc = colorSchemes.find((x) => x.id === settings.schemeId) ?? colorSchemes[0]
             if (!sc) return null
             return (
               <span className="scheme-preview">
