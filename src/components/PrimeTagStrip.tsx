@@ -249,10 +249,10 @@ export function PrimeTagStrip({ tag, selectedId, onSelect, selected, onSelectStr
                   const sel = e.id === selectedId
                   const endCls = barEndClasses(e)
                   return (
-                    <span key={e.id}>
+                    <div key={e.id}>
                       <div className={'chart-bar' + (sel ? ' selected' : '') + endCls} style={{ left: `${barLeft}%`, width: `${barWidth}%`, background: tag.color }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }} />
                       <span className="chart-bar-label" style={{ left: `${(left + right) / 2}%` }} title={tip} onClick={(ev) => { ev.stopPropagation(); onSelect(e) }}>{title}</span>
-                    </span>
+                    </div>
                   )
                 })}
               </div>

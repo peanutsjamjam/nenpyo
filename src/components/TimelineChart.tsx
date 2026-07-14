@@ -325,7 +325,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
                   // 端の確定精度で見た目を変える（日=ガント風キャップ / 月=軽い角丸 / 年=丸）。
                   const endCls = barEndClasses(e)
                   return (
-                    <span key={e.id}>
+                    <div key={e.id}>
                       {/* 反応するのは期間バーとタイトルだけ。バー外の余白は無反応。 */}
                       {!offLeft && !offRight && (
                         <div
@@ -342,7 +342,7 @@ export function TimelineChart({ events, selectedId, onSelect, onEdit, centerYear
                         onClick={(ev) => { ev.stopPropagation(); onSelect(e.id) }}
                         onDoubleClick={(ev) => { ev.stopPropagation(); onEdit(e) }}
                       >{labelText}</span>
-                    </span>
+                    </div>
                   )
                 })}
               </div>
