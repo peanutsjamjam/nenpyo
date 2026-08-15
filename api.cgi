@@ -664,10 +664,16 @@ eval {
             'SELECT id, username, email, password_hash, salt, iterations FROM users WHERE lower(email) = lower(?)',
             undef, $email
         );
-        fail('invalid_credentials', '401 Unauthorized') unless $u;
-        my $hash = pbkdf2($password, $u->{salt}, $u->{iterations});
-        fail('invalid_credentials', '401 Unauthorized')
-            unless const_eq($hash, $u->{password_hash});
+        # ユーザーが存在しなくてもダミーで PBKDF2 を回し、応答時間でのアカウント列挙を防ぐ。
+        # signup_request / reset_request は既に存在を秘匿しているので、ここだけが穴だった。
+        my $ok = 0;
+        if ($u) {
+            my $hash = pbkdf2($password, $u->{salt}, $u->{iterations});
+            $ok = const_eq($hash, $u->{password_hash});
+        } else {
+            pbkdf2($password, '0' x 32, $PBKDF2_ITER);
+        }
+        fail('invalid_credentials', '401 Unauthorized') unless $ok;
 
         my $token = random_hex(32);
         $dbh->do(
